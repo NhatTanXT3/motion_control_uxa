@@ -57,8 +57,14 @@ find_package(catkin REQUIRED COMPONENTS
    SAMJointStateMsg.msg
    SAMcmdMsg.msg
    SAMJointPos12Msg.msg
+   SAMJointPIDMsg.msg
+   SAMJointTorqueMsg.msg
 
    displayCmdMsg.msg
+   uxaParameter_displayMsg.msg
+   uxaSetPIDMsg.msg
+
+   SAMtfCalMsg.msg
  )
 
 ## Generate services in the 'srv' folder
@@ -129,14 +135,16 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-#set (uxa_motion_control_SRCS
-#   src/sammodule.cpp
-#)
+set (uxa_motion_control_SRCS
+   src/mypid.cpp
+)
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   ${uxa_motion_control_SRCS}
-# )
+ add_library(${PROJECT_NAME}
+   ${uxa_motion_control_SRCS}
+
+ )
+
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -146,7 +154,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/uxa_motion_control_node.cpp)
+# add_executable(my_pid src/mypid.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -212,4 +220,9 @@ include_directories(
 # catkin_add_nosetests(test)
 #add_executable(main_uxa_motion_controller src/main_uxa_motion_controller.cpp ${uxa_motion_control_SRCS} ) # difference between executable and library file?
 add_executable(main src/main_uxa_motion_control.cpp) # difference between executable and library file?
-target_link_libraries(main ${catkin_LIBRARIES})
+#target_link_libraries(main ${catkin_LIBRARIES})
+#target_link_libraries(${uxa_motion_control_SRCS})
+target_link_libraries(main
+  ${catkin_LIBRARIES}
+  ${PROJECT_NAME}
+)

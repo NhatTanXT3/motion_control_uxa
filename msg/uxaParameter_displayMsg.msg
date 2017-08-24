@@ -1,0 +1,10 @@
+float64 CN1
+float64 CN2
+float64 CN3
+float64 CN4
+float64 CN5
+float64 CN6
+float64 CN7
+float64 CN8
+float64 CN9
+float64 CN10
