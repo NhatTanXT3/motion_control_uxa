@@ -65,6 +65,8 @@ find_package(catkin REQUIRED COMPONENTS
    uxaSetPIDMsg.msg
 
    SAMtfCalMsg.msg
+
+   uxaSetPIDJointMsg.msg
  )
 
 ## Generate services in the 'srv' folder

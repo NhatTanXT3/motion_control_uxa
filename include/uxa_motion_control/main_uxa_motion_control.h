@@ -124,20 +124,20 @@ struct Sys_flag_struct{
     unsigned char controller_ankle_right:1;
     unsigned char controller_foot_place:1;
 
-    unsigned char controller_joint_0;
-    unsigned char controller_joint_1;
-    unsigned char controller_joint_8;
-    unsigned char controller_joint_9;
+    unsigned char controller_joint_0:1;
+    unsigned char controller_joint_1:1;
+    unsigned char controller_joint_8:1;
+    unsigned char controller_joint_9:1;
 
-    unsigned char controller_joint_3;
-    unsigned char controller_joint_5;
-    unsigned char controller_joint_7;
+    unsigned char controller_joint_3:1;
+    unsigned char controller_joint_5:1;
+    unsigned char controller_joint_7:1;
 
-    unsigned char controller_joint_2;
-    unsigned char controller_joint_4;
-    unsigned char controller_joint_6;
+    unsigned char controller_joint_2:1;
+    unsigned char controller_joint_4:1;
+    unsigned char controller_joint_6:1;
+    unsigned char controller_joint[12];
 }sys_flag;
-
 unsigned int pos12LowerLink[25];
 /*
  * =========== motion variable ===========
@@ -149,10 +149,15 @@ const int samPos12_hardware[25]={1640,1689,2050,2052,663,3446,1260,2910,2761,216
 
 const double pos12bitTorad=0.083*M_PI/180;
 const double pos12bitTodegree=0.083;
+const double degreeToPose12=1/0.083;
 
 double pos12_double[25];
 
+
 double delta_pos12[25];
+
+double posSetPointDegree[25];
+double delta_posDegree[25];
 /*
  * ==================== Pose ================
  */
@@ -162,25 +167,34 @@ double delta_pos12[25];
  unsigned int default_averageTorq[12]={2000,2000,2000,2000,2000,2000,2000,2000,2000,2000,2000,2000};
 
 //================================== sit down| from init posef===============================
- int pose_sitdown[25]={0,0,-652,652,1852,-1852,1604,-1604,-39,39,91,-39,
-                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+// int pose_sitdown[25]={0,0,-652,652,1852,-1852,1604,-1604,-39,39,91,-39,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+ double pose_sitdown[25]={0,0,-54,54,154,-154,132,-132,-3,3,7,-7,
+                          0,0,0,0,0,0,0,0,0,0,0,0,0};
 const unsigned int sitdown_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
  const unsigned char sitdown_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
  const unsigned char sitdown_samD[12]={15,15,15,15,15,15,15,15,15,15,15,15};
 //================================ init standing for walking| from standing================
- int pose_init_walking[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+// int pose_init_walking[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+//                                 0,0,0,0,0,0,0,0,0,0,0,0,0};
+ double pose_init_walking[25]={0,0,-16,16,25,-25,16,-16,0,0,2,-2,
                                  0,0,0,0,0,0,0,0,0,0,0,0,0};
-
 //{0,0,-300,300,522,-522,235,-235,-13,13,26,-26,
 //                                 0,0,0,0,0,0,0,0,0,0,0,0,0};
 //================================ standing| from sitdown================
-int pose_standing_1[25]={0,0,-652,652,1852,-1852,1604,-1604,-39,39,91,-39,
-                            0,0,0,0,0,0,0,0,0,0,0,0,0};
- int pose_standing_2[25]={0,0,-522,522,1408,-1408,1343,-1343,0,0,26,-26,
-                               0,0,0,0,0,0,0,0,0,0,0,0,0};
- int pose_standing_3[25]={0,0,-65,65,-26,26,-13,13,0,0,20,-20,
-                               0,0,0,0,0,0,0,0,0,0,0,0,0};
+//int pose_standing_1[25]={0,0,-652,652,1852,-1852,1604,-1604,-39,39,91,-39,
+//                            0,0,0,0,0,0,0,0,0,0,0,0,0};
+// int pose_standing_2[25]={0,0,-522,522,1408,-1408,1343,-1343,0,0,26,-26,
+//                               0,0,0,0,0,0,0,0,0,0,0,0,0};
+// int pose_standing_3[25]={0,0,-65,65,-26,26,-13,13,0,0,20,-20,
+//                               0,0,0,0,0,0,0,0,0,0,0,0,0};
 
+ double pose_standing_1[25]={0,0,-54,54,154,-154,132,-132,-3,3,7,-7,
+                          0,0,0,0,0,0,0,0,0,0,0,0,0};
+ double pose_standing_2[25]={0,0,-43,43,117,-117,111,-111,0,0,2,-2,
+                            0,0,0,0,0,0,0,0,0,0,0,0,0};
+ double pose_standing_3[25]={0,0,-5,5,0,0,-1,1,0,0,2,-2,
+                               0,0,0,0,0,0,0,0,0,0,0,0,0};
 const unsigned int standing_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
 const unsigned char standing_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
 const unsigned char standing_samD[12]={30,30,30,30,30,30,30,30,30,30,30,30};
@@ -188,26 +202,56 @@ const unsigned int numOfFrames_standing[2]={200,300};
 
 
 //================================ steping test| from initwaking================
- int pose_step_1[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
-                           0,0,0,0,0,0,0,0,0,0,0,0,0};
- int pose_step_2[25]={0,0,-400,200,700,-300,400,-200,0,0,20,-20,
+// int pose_step_1[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+// int pose_step_2[25]={0,0,-400,200,700,-300,400,-200,0,0,20,-20,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+// int pose_step_3[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+
+// int pose_step_4[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+// int pose_step_5[25]={0,0,-200,400,300,-700,200,-400,0,0,20,-20,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+// int pose_step_6[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+// int pose_step_7[25]={0,0,-250,250,400,-400,250,-250,0,0,20,-20,
+//                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+
+ double pose_step_0[25]={6,6,-17,17,25,-25,17,-17,-6,-6,1.5,-1.5,
                            0,0,0,0,0,0,0,0,0,0,0,0,0};
 
- int pose_step_3[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+ double pose_step_1[25]={0,0,-17,17,25,-25,17,-17,0,0,1.5,-1.5,
+                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+ double pose_step_2[25]={6,6,-33,17,58,-25,33,-17,-6,6,1.5,-1.5,
+                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+ double pose_step_3[25]={6,6,-17,17,25,-25,17,-17,-6,-6,1.5,-1.5,
                            0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 
- int pose_step_4[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+ double pose_step_4[25]={0,0,-17,17,25,-25,17,-17,0,0,1.5,-1.5,
                            0,0,0,0,0,0,0,0,0,0,0,0,0};
 
- int pose_step_5[25]={0,0,-200,400,300,-700,200,-400,0,0,20,-20,
+ double pose_step_8[25]={-8,-8,-17,17,25,-25,17,-17,8,8,1.5,-1.5,
                            0,0,0,0,0,0,0,0,0,0,0,0,0};
 
- int pose_step_6[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
+ double pose_step_5[25]={-8,-8,-17,33,25,-58,17,-33,8,8,1.5,-1.5,
                            0,0,0,0,0,0,0,0,0,0,0,0,0};
 
- int pose_step_7[25]={0,0,-250,250,400,-400,250,-250,0,0,20,-20,
+ double pose_step_6[25]={-8,-8,-17,17,25,-25,17,-17,8,8,1.5,-1.5,
                            0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+ double pose_step_7[25]={0,0,-20,20,33,-33,20,-20,0,0,1.5,-1.5,
+                           0,0,0,0,0,0,0,0,0,0,0,0,0};
+
 const unsigned int steping_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
 const unsigned char steping_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
 const unsigned char steping_samD[12]={30,30,30,30,30,30,30,30,30,30,30,30};
@@ -259,12 +303,17 @@ class Scene_class{
     double slope_end[25];
     double slope_midle[25];
 public:
-    unsigned int *beginPose=NULL;//dagerous thing,no infor about memory
-    unsigned int *endPose=NULL;
-    unsigned int buf_beginPose[NUM_OF_SAM_];
-    unsigned int buf_endPose[NUM_OF_SAM_];
-//    unsigned int beginPose[25];//=NULL;//dagerous thing,no infor about memory
-//    unsigned int endPose[25];//=NULL;
+//    unsigned int *beginPose=NULL;//dagerous thing,no infor about memory
+//    unsigned int *endPose=NULL;
+//    unsigned int buf_beginPose[NUM_OF_SAM_];
+//    unsigned int buf_endPose[NUM_OF_SAM_];
+
+    double *beginPose=NULL;//dagerous thing,no infor about memory
+    double *endPose=NULL;
+
+    double buf_beginPose[NUM_OF_SAM_];
+    double buf_endPose[NUM_OF_SAM_];
+
     unsigned int frame;
     unsigned int numOfFrame;
     struct Flag{
@@ -274,14 +323,24 @@ public:
         unsigned char delay:1;
         unsigned char controller_stable:1;
     }flag;
+
+//    void setBeginPose(unsigned int *value);
+//    void setEndPose(unsigned int *value);
+//    void setUpMyScene(unsigned int fr, int *beginpose, int *endpose);
+
     void setFrame(unsigned int value);
-    void setBeginPose(unsigned int *value);
-    void setEndPose(unsigned int *value);
     void setNumOfFrame(unsigned int value);
     void setDelayScene(unsigned int fr);
-    void setUpMyScene(unsigned int fr, int *beginpose, int *endpose);
+    void setUpMyScene(unsigned int fr, double *beginpose, double *endpose);
+    void setBeginPose(double *value);
+    void setEndPose(double *value);
+
     void mapSoftToHardPose(int *softwarePose, unsigned int *hardwarePose, unsigned char size);
      void mapHardToSoftPose(unsigned int *hardwarePose, int *softwarePose, unsigned char size);
+//     void mapDegreeToPos12(double *degreePose,unsigned int *hardwarePose,unsigned char size);
+     void mapPos12ToDegree(unsigned int *hardwarePose,double *degreePose,unsigned char size);
+
+
 
     Scene_class(){
     }
@@ -311,6 +370,7 @@ double rightFootPos[3];
 double footsDistance=0;
 double COMposSetpoint=0;
 unsigned int currentSamPos12[25];
+double currentSAMPosDegree[25];
 unsigned char currentSamAvail[25];
 unsigned int currentControlledSamPos12[25];
 
@@ -333,6 +393,7 @@ myPID pid_joint_2;
 myPID pid_joint_4;
 myPID pid_joint_6;
 
+myPID pid_joint[12];
 
 
 myPID pid_body_pitch;

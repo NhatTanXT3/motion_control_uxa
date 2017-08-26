@@ -18,6 +18,7 @@ using namespace std;
 #include "uxa_motion_control/displayCmdMsg.h"
 #include "uxa_motion_control/uxaParameter_displayMsg.h"
 #include "uxa_motion_control/uxaSetPIDMsg.h"
+#include "uxa_motion_control/uxaSetPIDJointMsg.h"
 
 
 
@@ -72,8 +73,10 @@ void sam_callback(const uxa_motion_control::SAMJointStateMsg::ConstPtr& msg);
 void sensor_callback(const uxa_motion_control::dataSensorMsg::ConstPtr& msg);
 void sub_function_cmd(const uxa_motion_control::motionCmdMsg::ConstPtr& msg);
 void sub_function_setPID(const uxa_motion_control::uxaSetPIDMsg::ConstPtr& msg);
+void sub_function_setPIDJoints(const uxa_motion_control::uxaSetPIDJointMsg::ConstPtr& msg);
 void PID_control_init();
 void PID_reset();
+void PID_joint_enable(unsigned char stt);
 
 
 int main(int argc, char **argv){
@@ -84,6 +87,7 @@ int main(int argc, char **argv){
     sensor_cmd_pub =  n.advertise<uxa_motion_control::cmdSensorMsg>("sensor_sub",200);
     ros::Subscriber motion_cmd_sub=n.subscribe<uxa_motion_control::motionCmdMsg>("motion_cmd_sub",200,sub_function_cmd);
     ros::Subscriber setPID_sub =n.subscribe<uxa_motion_control::uxaSetPIDMsg>("setPID",200,sub_function_setPID);
+    ros::Subscriber setPIDJoint_sub =n.subscribe<uxa_motion_control::uxaSetPIDJointMsg>("setPIDJoints",200,sub_function_setPIDJoints);
 
     ros::Subscriber sensor_data_sub =  n.subscribe<uxa_motion_control::dataSensorMsg>("sensor_pub",1000,sensor_callback);
     ros::Subscriber sam_joint_state_sub =  n.subscribe<uxa_motion_control::SAMJointStateMsg>("sam_pub",1000,sam_callback);
@@ -114,6 +118,7 @@ int main(int argc, char **argv){
     samPos12.SAMMode[22]=1;
 
     memset(currentSamPos12,'\0',25);
+    memset(sys_flag.controller_joint,'\0',12);
 
     task.id=TASK_IDLE_;
     task.preId=TASK_IDLE_;
@@ -139,11 +144,6 @@ int main(int argc, char **argv){
         {
             FlagTimer.Hz_50=0;
             //================
-            //                unsigned char Trans_chr[1] ={ '0'};
-            //                mySAM->Send_Serial_String(mySAM->Serial, Trans_chr, 1);
-            //                  ROS_INFO("%s", "getFilteredData_50Hz");
-            //            task_handle();
-            //            controller_handle();
 
         }
 
@@ -185,79 +185,129 @@ void controller_handle(){
         }
     }
 
-    if(sys_flag.feedback_sam_available){
+
+
+
+    if(sys_flag.feedback_sam_available&&sys_flag.feedback_tfCal_available){
         sys_flag.feedback_sam_available=0;
+        sys_flag.feedback_tfCal_available=0;
         // using sam feedback
-        if(sys_flag.controller_joint_3){
-            if(currentSamAvail[3]){
-                double angle=((double)currentSamPos12[3]-(double)samPos12_hardware[3])*pos12bitTodegree;
-                pid_joint_3.PID_type_5(angle,0.8);
 
+        for(unsigned char i=0;i<12;i++){
+            if(sys_flag.controller_joint[i]){
+                pid_joint[i].set_point=posSetPointDegree[i];
             }
         }
 
-        if(sys_flag.controller_joint_5){
-            if(currentSamAvail[5]){
-                double angle=((double)currentSamPos12[5]-(double)samPos12_hardware[5])*pos12bitTodegree;
-                pid_joint_5.PID_type_5(angle,0.8);
+        //using tfCal feedback
+        if(sys_flag.controller_foot_place){
+            pid_foot_place.PID_type_5(footsDistance,0.8);
+            if(task.id==TASK_STEP_TEST){
+                if(task.scene==2||task.scene==3){
+                    pid_joint[8].set_point=posSetPointDegree[8]-pid_foot_place.output;
+                }
+                else if(task.scene==7||task.scene==8){
+                    pid_joint[9].set_point=posSetPointDegree[9]+pid_foot_place.output;
+                }
+            }
+
+
+            plotMsg.CN1=posSetPointDegree[9];
+            plotMsg.CN2=pid_joint[0].output;
+            plotMsg.CN3=pid_joint[0].fb;
+
+            plotMsg.CN4=pid_joint[9].output;
+            plotMsg.CN5=pid_joint[9].fb;
+            plotMsg.CN6=pid_joint[9].set_point;
+
+
+            plotMsg.CN7=pid_foot_place.set_point;
+            plotMsg.CN8=pid_foot_place.output;
+            plotMsg.CN9=pid_foot_place.fb;
+
+            plotMsg.CN10=pid_joint[8].output;
+            plotMsg.CN11=pid_joint[8].fb;
+            plotMsg.CN12=pid_joint[8].set_point;
+            plot_pub.publish(plotMsg);
+        }
+
+        for(unsigned char i=0;i<12;i++){
+            if(sys_flag.controller_joint[i]){
+                pid_joint[i].PID_type_5(currentSAMPosDegree[i],0.8);
             }
         }
 
-        if(sys_flag.controller_joint_7){
-            if(currentSamAvail[7]){
-                double angle=((double)currentSamPos12[7]-(double)samPos12_hardware[7])*pos12bitTodegree;
-                pid_joint_7.PID_type_5(angle,0.8);
 
-            }
-        }
 
-        if(sys_flag.controller_joint_2){
-            if(currentSamAvail[2]){
-                double angle=((double)currentSamPos12[2]-(double)samPos12_hardware[2])*pos12bitTodegree;
-                pid_joint_2.PID_type_5(angle,0.8);
+        //        if(sys_flag.controller_joint_3){
+        //            if(currentSamAvail[3]){
+        //                double angle=((double)currentSamPos12[3]-(double)samPos12_hardware[3])*pos12bitTodegree;
+        //                pid_joint_3.PID_type_5(angle,0.8);
 
-            }
-        }
+        //            }
+        //        }
 
-        if(sys_flag.controller_joint_4){
-            if(currentSamAvail[4]){
-                double angle=((double)currentSamPos12[4]-(double)samPos12_hardware[4])*pos12bitTodegree;
-                pid_joint_4.PID_type_5(angle,0.8);
-            }
-        }
+        //        if(sys_flag.controller_joint_5){
+        //            if(currentSamAvail[5]){
+        //                double angle=((double)currentSamPos12[5]-(double)samPos12_hardware[5])*pos12bitTodegree;
+        //                pid_joint_5.PID_type_5(angle,0.8);
+        //            }
+        //        }
 
-        if(sys_flag.controller_joint_6){
-            if(currentSamAvail[6]){
-                double angle=((double)currentSamPos12[6]-(double)samPos12_hardware[6])*pos12bitTodegree;
-                pid_joint_6.PID_type_5(angle,0.8);
+        //        if(sys_flag.controller_joint_7){
+        //            if(currentSamAvail[7]){
+        //                double angle=((double)currentSamPos12[7]-(double)samPos12_hardware[7])*pos12bitTodegree;
+        //                pid_joint_7.PID_type_5(angle,0.8);
 
-            }
-        }
-//        {1,1,-1,1,-1,-1,1,-1,1,1,1,1,
-//                            1,-1,-1,-1,1,-1,1,1,1,1,-1,-1,1};
+        //            }
+        //        }
 
-        if(sys_flag.controller_joint_0){
-            if(currentSamAvail[0]){
-                double angle=((double)currentSamPos12[0]-(double)samPos12_hardware[0])*pos12bitTodegree;
-                pid_joint_0.PID_type_5(angle,0.8);
+        //        if(sys_flag.controller_joint_2){
+        //            if(currentSamAvail[2]){
+        //                double angle=((double)currentSamPos12[2]-(double)samPos12_hardware[2])*pos12bitTodegree;
+        //                pid_joint_2.PID_type_5(angle,0.8);
 
-            }
-        }
+        //            }
+        //        }
 
-        if(sys_flag.controller_joint_1){
-            if(currentSamAvail[1]){
-                double angle=((double)currentSamPos12[1]-(double)samPos12_hardware[1])*pos12bitTodegree;
-                pid_joint_1.PID_type_5(angle,0.8);
-            }
-        }
+        //        if(sys_flag.controller_joint_4){
+        //            if(currentSamAvail[4]){
+        //                double angle=((double)currentSamPos12[4]-(double)samPos12_hardware[4])*pos12bitTodegree;
+        //                pid_joint_4.PID_type_5(angle,0.8);
+        //            }
+        //        }
 
-        if(sys_flag.controller_joint_8){
-            if(currentSamAvail[8]){
-                double angle=((double)currentSamPos12[8]-(double)samPos12_hardware[8])*pos12bitTodegree;
-                pid_joint_8.PID_type_5(angle,0.8);
+        //        if(sys_flag.controller_joint_6){
+        //            if(currentSamAvail[6]){
+        //                double angle=((double)currentSamPos12[6]-(double)samPos12_hardware[6])*pos12bitTodegree;
+        //                pid_joint_6.PID_type_5(angle,0.8);
 
-            }
-        }
+        //            }
+        //        }
+
+
+        //        if(sys_flag.controller_joint_0){
+        //            if(currentSamAvail[0]){
+        //                double angle=((double)currentSamPos12[0]-(double)samPos12_hardware[0])*pos12bitTodegree;
+        //                pid_joint_0.PID_type_5(angle,0.8);
+
+        //            }
+        //        }
+
+        //        if(sys_flag.controller_joint_1){
+        //            if(currentSamAvail[1]){
+        //                double angle=((double)currentSamPos12[1]-(double)samPos12_hardware[1])*pos12bitTodegree;
+        //                pid_joint_1.PID_type_5(angle,0.8);
+        //            }
+        //        }
+
+        //        if(sys_flag.controller_joint_8){
+        //            if(currentSamAvail[8]){
+        //                double angle=((double)currentSamPos12[8]-(double)samPos12_hardware[8])*pos12bitTodegree;
+        //                pid_joint_8.PID_type_5(angle,0.8);
+
+        //            }
+        //        }
         //            case 3:
         //                PID_reset();
         //                //                pid_ankle_left.set_point=0;
@@ -274,13 +324,13 @@ void controller_handle(){
         //                currentScene.setUpMyScene(100,beginpose,pose_step_3);
         //                cout<<"scene 3"<<endl;
         //                break;
-        if(sys_flag.controller_joint_9){
-            if(currentSamAvail[9]){
-                double angle=((double)currentSamPos12[9]-(double)samPos12_hardware[9])*pos12bitTodegree;
-                pid_joint_9.PID_type_5(angle,0.8);
+        //        if(sys_flag.controller_joint_9){
+        //            if(currentSamAvail[9]){
+        //                double angle=((double)currentSamPos12[9]-(double)samPos12_hardware[9])*pos12bitTodegree;
+        //                pid_joint_9.PID_type_5(angle,0.8);
 
-            }
-        }
+        //            }
+        //        }
 
         //        if(sys_flag.controller_body_roll){
 
@@ -315,88 +365,66 @@ void controller_handle(){
         //        }
     }
 
-    if(sys_flag.feedback_tfCal_available){
-        sys_flag.feedback_tfCal_available=0;
 
-        //using tfCal feedback
-        if(sys_flag.controller_foot_place){
-            pid_foot_place.PID_type_5(footsDistance,0.8);
-            if(task.id==TASK_STEP_TEST){
-                if(task.scene==2||task.scene==3){
-                    pid_joint_8.set_point=-pid_foot_place.output;
-                }
-                else if(task.scene==7||task.scene==8){
-                    pid_joint_9.set_point=pid_foot_place.output;
-                }
 
-            }
 
+    bool controller_on=0;
+    for(unsigned char i=0;i<12;i++){
+        if(sys_flag.controller_joint[i])
+        {
+            controller_on=1;
+            controller_output[i]=pid_joint[i].output;
         }
     }
 
-
-    unsigned char controller_on=0;
-    if(sys_flag.controller_ankle_left|sys_flag.controller_ankle_right|sys_flag.controller_body_pitch|
-            sys_flag.controller_body_roll|sys_flag.controller_foot_place|
-            sys_flag.controller_joint_0|sys_flag.controller_joint_1|sys_flag.controller_joint_8|sys_flag.controller_joint_9){
-        controller_on=1;
-        //========
+//    if(sys_flag.controller_ankle_left|sys_flag.controller_ankle_right|sys_flag.controller_body_pitch|
+//            sys_flag.controller_body_roll|sys_flag.controller_foot_place|
+//            sys_flag.controller_joint_0|sys_flag.controller_joint_1|sys_flag.controller_joint_8|sys_flag.controller_joint_9){
+//        controller_on=1;
+//        //========
 
 
 
-        controller_output[6]=-pid_body_pitch.output;
-        controller_output[2]=-pid_body_pitch.output*0.6;
-        controller_output[3]=pid_body_pitch.output*0.6;
-        controller_output[7]=pid_body_pitch.output;
-        //========
-        //        controller_output[1]=-pid_body_roll_0_1.output;
-        controller_output[1]=pid_joint_1.output;
-        //        if(leftZMP.amp>50)
-        //        {
-        //            controller_output[1]-=pid_ankle_left.output;
+//        controller_output[6]=-pid_body_pitch.output;
+//        controller_output[2]=-pid_body_pitch.output*0.6;
+//        controller_output[3]=pid_body_pitch.output*0.6;
+//        controller_output[7]=pid_body_pitch.output;
+//        //========
+//        //        controller_output[1]=-pid_body_roll_0_1.output;
+//        controller_output[1]=pid_joint_1.output;
+//        //        if(leftZMP.amp>50)
+//        //        {
+//        //            controller_output[1]-=pid_ankle_left.output;
+//        //        }
+
+//        //        controller_output[0]=-pid_body_roll_0_1.output;
+//        controller_output[0]=pid_joint_0.output;
+//        //        if(rightZMP.amp>50)
+//        //        {
+//        //            controller_output[0]-=pid_ankle_right.output;
+//        //        }
+
+//        //        controller_output[9]=pid_body_roll_8_9.output;//+pid_foot_place.output+pid_ankle_left.output;
+//        //        controller_output[8]=pid_body_roll_8_9.output-pid_foot_place.output;
+
+//        controller_output[9]=pid_joint_9.output;//+pid_foot_place.output+pid_ankle_left.output;
+//        controller_output[8]=pid_joint_8.output;//-pid_foot_place.output;
+
+
+//        controller_output[4]=pid_joint[4].output;
+
+
+//    }
+
+
+    if(currentScene.flag.enable|controller_on){
+
+        //        if((task.id==TASK_STEP_TEST)&&(task.scene==1)){
+        //            if(abs(pid_joint[1].er)<1){
+        //                currentScene.flag.finish=1;
+        //                cout<< "control stable scene 0"<< endl;
+        //            }
         //        }
-
-        //        controller_output[0]=-pid_body_roll_0_1.output;
-        controller_output[0]=pid_joint_0.output;
-        //        if(rightZMP.amp>50)
-        //        {
-        //            controller_output[0]-=pid_ankle_right.output;
-        //        }
-
-        //        controller_output[9]=pid_body_roll_8_9.output;//+pid_foot_place.output+pid_ankle_left.output;
-        //        controller_output[8]=pid_body_roll_8_9.output-pid_foot_place.output;
-
-        controller_output[9]=pid_joint_9.output;//+pid_foot_place.output+pid_ankle_left.output;
-        controller_output[8]=pid_joint_8.output;//-pid_foot_place.output;
-
-        plotMsg.CN1=pid_joint_8.set_point;
-        plotMsg.CN2=pid_joint_8.output;
-        plotMsg.CN3=pid_joint_8.fb;
-
-        plotMsg.CN4=pid_joint_1.output;
-        plotMsg.CN5=pid_joint_1.fb;
-        plotMsg.CN6=pid_joint_1.set_point;
-
-
-        plotMsg.CN7=pid_foot_place.output;
-        plotMsg.CN8=pid_foot_place.fb;
-        plotMsg.CN9=pid_foot_place.set_point;
-
-        plotMsg.CN10=pid_joint_9.output;
-        plotMsg.CN11=pid_joint_9.fb;
-        plotMsg.CN12=pid_joint_9.set_point;
-
-        //        if(lef)
-        plot_pub.publish(plotMsg);
-
-
-
-        if((task.id==TASK_STEP_TEST)&&(task.scene==1)){
-            if(abs(pid_joint_1.er)<1){
-                currentScene.flag.finish=1;
-                cout<< "control stable scene 0"<< endl;
-            }
-        }
 
 
         if((task.id==TASK_STEP_TEST)&&(task.scene==3)){
@@ -407,12 +435,12 @@ void controller_handle(){
             }
         }
 
-        if((task.id==TASK_STEP_TEST)&&(task.scene==6)){
-            if(abs(pid_joint_0.er)<1){
-                currentScene.flag.finish=1;
-                cout<< "control stable scene 5"<< endl;
-            }
-        }
+        //        if((task.id==TASK_STEP_TEST)&&(task.scene==6)){
+        //            if(abs(pid_joint[0].er)<1){
+        //                currentScene.flag.finish=1;
+        //                cout<< "control stable scene 5"<< endl;
+        //            }
+        //        }
 
         if((task.id==TASK_STEP_TEST)&&(task.scene==8)){
             if(leftZMP.amp>40){
@@ -421,11 +449,9 @@ void controller_handle(){
                 cout<< "foot contact scene 7"<< endl;
             }
         }
-    }
 
-    if(currentScene.flag.enable|controller_on){
         for (unsigned char i=0;i<NUM_OF_SAM_;i++){
-            samPos12.SAMPos12[i]=(unsigned int)(pos12_double[i]+controller_output[i]);
+            samPos12.SAMPos12[i]=(unsigned int)(posSetPointDegree[i]*degreeToPose12+(double)samPos12_hardware[i]+controller_output[i]);
             currentControlledSamPos12[i]=samPos12.SAMPos12[i];
         }
         if(sys_flag.enable_sam)
@@ -439,7 +465,7 @@ void task_handle(){
     case TASK_INIT_F_IDLE:
         if(task.startFlag==0){
             task.startFlag=1;
-            ROS_INFO("task init: start");
+            ROS_INFO("task init: start...");
             //===============
 
         }
@@ -466,26 +492,24 @@ void task_handle(){
                     count++;
             }
 
-            if((count==13)&&(currentSamPos12[0]>0))
+            task.finishFlag=1;
+            cout <<"init task done"<<endl;
+            for (unsigned char i=0;i<NUM_OF_SAM_;i++)
             {
-                task.finishFlag=1;
-                cout <<"init task done"<<endl;
-                for (unsigned char i=0;i<NUM_OF_SAM_;i++)
-                {
-                    cout <<currentSamPos12[i]<<":";
-                }
-                cout<<endl;
+                if(currentSamAvail[i])
+                    cout <<currentSAMPosDegree[i]<<":";
+            }
+            cout<<endl;
 
-                //                for(unsigned char i=0;i<12;i++)
-                //                {
-                //                    pos12[i]=currentSamPos12[i];
-                //                    angle[i]=((double)pos12[i]-(double)samPos12_offset[i])*pos12bitTorad;
-                //                }
-            }
-            else{
-                //                sleep(1);
-                cout <<"init error: "<<(int)count<<endl;
-            }
+            //                for(unsigned char i=0;i<12;i++)
+            //                {
+            //                    pos12[i]=currentSamPos12[i];
+            //                    angle[i]=((double)pos12[i]-(double)samPos12_offset[i])*pos12bitTorad;
+            //                }
+            //            }
+            //            else{
+            //                cout <<"init error: "<<(int)count<<endl;
+            //            }
         }
 
         break;
@@ -540,8 +564,9 @@ void task_handle(){
                 task.setup_para=0;
                 ROS_INFO("task sitdown: start");
                 int beginpose[NUM_OF_SAM_];
-                currentScene.mapHardToSoftPose(currentSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(400,beginpose,pose_sitdown);
+                //                currentScene.mapHardToSoftPose(currentSamPos12,beginpose,NUM_OF_SAM_);
+                //                currentScene.setUpMyScene(400,beginpose,pose_sitdown);
+                currentScene.setUpMyScene(400,currentSAMPosDegree,pose_sitdown);
             }
         }
         else if(currentScene.flag.finish)
@@ -640,7 +665,6 @@ void task_handle(){
             task.startFlag=0;
             task.id=TASK_IDLE_;
             task.preId=TASK_STANDING_F_SITDOWN;
-            //            sleep(1);
             ROS_INFO("task standing: finish");
         }
         break;
@@ -662,8 +686,6 @@ void task_handle(){
             task.preId=TASK_STANDINGINIT_F_STANDING;
             task.id=TASK_IDLE_;
             ROS_INFO("task standinginit: finish");
-            // PID_reset();
-            // sys_flag.controller_body_pitch=1;
         }
         break;
 
@@ -672,22 +694,22 @@ void task_handle(){
             task.startFlag=1;
             //===============
 
-            int beginpose[NUM_OF_SAM_];
-            currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+            double beginpose[NUM_OF_SAM_];
+            currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
             currentScene.setUpMyScene(300,beginpose,pose_standing_3);
-            //              currentScene.setUpMyScene(300,pose_init_walking,pose_standing_3);
+
 
             PID_reset();
-            sys_flag.controller_body_pitch=0;
-            sys_flag.controller_body_roll=0;
-            sys_flag.controller_ankle_left=0;
-            sys_flag.controller_ankle_right=0;
-            sys_flag.controller_foot_place=0;
+            //            sys_flag.controller_body_pitch=0;
+            //            sys_flag.controller_body_roll=0;
+            //            sys_flag.controller_ankle_left=0;
+            //            sys_flag.controller_ankle_right=0;
+            //            sys_flag.controller_foot_place=0;
 
-            sys_flag.controller_joint_0=0;
-            sys_flag.controller_joint_1=0;
-            sys_flag.controller_joint_8=0;
-            sys_flag.controller_joint_9=0;
+            //            sys_flag.controller_joint_0=0;
+            //            sys_flag.controller_joint_1=0;
+            //            sys_flag.controller_joint_8=0;
+            //            sys_flag.controller_joint_9=0;
             ROS_INFO("task standing from standing init: start");
         }
         else if(currentScene.flag.finish)
@@ -747,31 +769,36 @@ void task_handle(){
             task.scene=0;
             currentScene.flag.finish=1;
             /*
-             * Your code begin from here
-             */
+                     * Your code begin from here
+                     */
         }
         else if(currentScene.flag.finish)
         {
             switch(task.scene){
-            int beginpose[NUM_OF_SAM_];
+            double beginpose[NUM_OF_SAM_];
             case 0:
+                PID_joint_enable(1);
 
-                pid_joint_0.set_point=6;
-                pid_joint_1.set_point=6;
-                pid_joint_9.set_point=-6;
-                pid_joint_8.set_point=-6;
-                pid_joint_0.KP=0;
-                pid_joint_0.KI=40;
-                pid_joint_1.KP=0;
-                pid_joint_1.KI=40;
-                pid_joint_8.KP=0;
-                pid_joint_8.KI=40;
-                pid_joint_9.KP=0;
-                pid_joint_9.KI=40;
-                sys_flag.controller_joint_0=1;
-                sys_flag.controller_joint_1=1;
-                sys_flag.controller_joint_8=1;
-                sys_flag.controller_joint_9=1;
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.setUpMyScene(100,beginpose,pose_step_0);
+
+                //                pid_joint[0].set_point=6;
+                //                pid_joint[1].set_point=6;
+                //                pid_joint[9].set_point=-6;
+                //                pid_joint[8].set_point=-6;
+
+                //                pid_joint[0].KP=0;
+                //                pid_joint[0].KI=40;
+                //                pid_joint[1].KP=0;
+                //                pid_joint[1].KI=40;
+                //                pid_joint[8].KP=0;
+                //                pid_joint[8].KI=40;
+                //                pid_joint[9].KP=0;
+                //                pid_joint[9].KI=40;
+                //                sys_flag.controller_joint[0]=1;
+                //                sys_flag.controller_joint[1]=1;
+                //                sys_flag.controller_joint[8]=1;
+                //                sys_flag.controller_joint[9]=1;
 
                 //                sys_flag.controller_foot_place=1;
                 //                pid_foot_place.set_point=0.1;
@@ -783,66 +810,66 @@ void task_handle(){
 
                 PID_reset();
 
-                pid_joint_0.KP=0;
-                pid_joint_0.KI=10;
-                pid_joint_1.KP=0;
-                pid_joint_1.KI=60;
-                pid_joint_8.KP=0;
-                pid_joint_8.KI=80;
-                pid_joint_9.KP=5;
-                pid_joint_9.KI=200;
+                //                pid_joint_0.KP=0;
+                //                pid_joint_0.KI=10;
+                //                pid_joint_1.KP=0;
+                //                pid_joint_1.KI=60;
+
+                pid_joint[8].KI=80;
+                pid_joint[9].KI=200;
 
                 sys_flag.controller_foot_place=1;
                 pid_foot_place.set_point=0.14;
-                pid_foot_place.I_term=-pid_joint_8.set_point;
+                pid_foot_place.I_term=-pid_joint[8].set_point;
 
 
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(numOfFrames_steping[0],beginpose,pose_step_2);
                 cout<<"scene 1"<<endl;
                 break;
             case 2:
                 PID_reset();
-                pid_foot_place.I_term=-pid_joint_8.set_point;
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                pid_foot_place.I_term=-pid_joint[8].set_point;
+
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(numOfFrames_steping[1],beginpose,pose_step_3);
                 cout<<"scene 2"<<endl;
                 break;
             case 3:
                 PID_reset();
                 sys_flag.controller_foot_place=0;
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(20,beginpose,pose_step_7);
                 cout<<"scene 3"<<endl;
                 break;
             case 4:
                 PID_reset();
-                sys_flag.controller_joint_8=0;
-                sys_flag.controller_joint_0=0;
-                sys_flag.controller_joint_1=0;
-                sys_flag.controller_joint_9=0;
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                PID_joint_enable(0);
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(100,beginpose,pose_step_1);
                 cout<<"scene 4"<<endl;
                 break;
 
             case 5:
-                pid_joint_0.set_point=-8;
-                pid_joint_1.set_point=-8;
-                pid_joint_8.set_point=8;
-                pid_joint_9.set_point=8;
-                pid_joint_0.KP=0;
-                pid_joint_0.KI=40;
-                pid_joint_1.KP=0;
-                pid_joint_1.KI=40;
-                pid_joint_8.KP=0;
-                pid_joint_8.KI=40;
-                pid_joint_9.KP=0;
-                pid_joint_9.KI=40;
-                sys_flag.controller_joint_0=1;
-                sys_flag.controller_joint_1=1;
-                sys_flag.controller_joint_8=1;
-                sys_flag.controller_joint_9=1;
+                //                pid_joint_0.set_point=-8;
+                //                pid_joint_1.set_point=-8;
+                //                pid_joint_8.set_point=8;
+                //                pid_joint_9.set_point=8;
+                //                pid_joint_0.KP=0;
+                //                pid_joint_0.KI=40;
+                //                pid_joint_1.KP=0;
+                //                pid_joint_1.KI=40;
+                //                pid_joint_8.KP=0;
+                //                pid_joint_8.KI=40;
+                //                pid_joint_9.KP=0;
+                //                pid_joint_9.KI=40;
+                //                sys_flag.controller_joint_0=1;
+                //                sys_flag.controller_joint_1=1;
+                //                sys_flag.controller_joint_8=1;
+                //                sys_flag.controller_joint_9=1;
+                PID_joint_enable(1);
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.setUpMyScene(100,beginpose,pose_step_8);
 
 
                 cout<<"scene 5"<<endl;
@@ -852,55 +879,46 @@ void task_handle(){
             case 6:
 
                 PID_reset();
-                pid_joint_0.KP=0;
-                pid_joint_0.KI=60;
-                pid_joint_1.KP=0;
-                pid_joint_1.KI=10;
-                pid_joint_8.KP=5;
-                pid_joint_8.KI=200;
-                pid_joint_9.KP=0;
-                pid_joint_9.KI=80;
-
+                pid_joint[8].KI=200;
+                pid_joint[9].KI=80;
                 sys_flag.controller_foot_place=1;
                 pid_foot_place.set_point=0.14;
-                pid_foot_place.I_term=pid_joint_9.set_point;
+                pid_foot_place.I_term=pid_joint[9].set_point;
 
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(numOfFrames_steping[0],beginpose,pose_step_5);
                 cout<<"scene 6"<<endl;
                 break;
 
             case  7:
                 PID_reset();
-                pid_foot_place.I_term=pid_joint_9.set_point;
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                pid_foot_place.I_term=pid_joint[9].set_point;
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(numOfFrames_steping[1],beginpose,pose_step_6);
                 cout<<"scene 7"<<endl;
                 break;
             case 8:
                 PID_reset();
                 sys_flag.controller_foot_place=0;
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(20,beginpose,pose_step_7);
                 cout<<"scene 8"<<endl;
                 break;
             case 9:
                 PID_reset();
-                sys_flag.controller_joint_0=0;
-                sys_flag.controller_joint_1=0;
-                sys_flag.controller_joint_8=0;
-                sys_flag.controller_joint_9=0;
-                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                PID_joint_enable(0);
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
                 currentScene.setUpMyScene(100,beginpose,pose_step_1);
                 cout<<"scene 9"<<endl;
                 break;
 
             default:
-                sys_flag.controller_foot_place=0;
-                sys_flag.controller_joint_0=0;
-                sys_flag.controller_joint_1=0;
-                sys_flag.controller_joint_8=0;
-                sys_flag.controller_joint_9=0;
+                //                sys_flag.controller_foot_place=0;
+                //                sys_flag.controller_joint_0=0;
+                //                sys_flag.controller_joint_1=0;
+                //                sys_flag.controller_joint_8=0;
+                //                sys_flag.controller_joint_9=0;
+
                 //                                sys_flag.controller_ankle_left=0;
                 //                sys_flag.controller_joint_0=0;
                 //                sys_flag.controller_joint_1=0;
@@ -921,41 +939,86 @@ void task_handle(){
             task.preId=TASK_STEP_TEST;
         }
         break;
-    case TASK_STANDINGINIT_F_STEP:
-        if(task.startFlag==0){
-            task.startFlag=1;
-            //===============
+        //    case TASK_STANDINGINIT_F_STEP:
+        //        if(task.startFlag==0){
+        //            task.startFlag=1;
+        //            //===============
 
-            int beginpose[NUM_OF_SAM_];
-            currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-            currentScene.setUpMyScene(300,beginpose,pose_init_walking);
-            //              currentScene.setUpMyScene(300,pose_init_walking,pose_standing_3);
-            PID_reset();
-            sys_flag.controller_body_pitch=0;
-            sys_flag.controller_body_roll=0;
-            sys_flag.controller_ankle_left=0;
-            sys_flag.controller_ankle_right=0;
-            sys_flag.controller_foot_place=0;
-            ROS_INFO("task standing init from step: start");
-        }
-        else if(currentScene.flag.finish)
-        {
-            currentScene.flag.finish=0;
-            task.finishFlag=1;
-        }
-        else if(task.finishFlag){
-            task.finishFlag=0;
-            task.startFlag=0;
-            task.preId=TASK_STANDINGINIT_F_STEP;
-            task.id=TASK_IDLE_;
-            ROS_INFO("task standing init from step: finish");
-        }
+        //            int beginpose[NUM_OF_SAM_];
+        //            currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+        //            currentScene.setUpMyScene(300,beginpose,pose_init_walking);
+        //            //              currentScene.setUpMyScene(300,pose_init_walking,pose_standing_3);
+        //            PID_reset();
+        //            sys_flag.controller_body_pitch=0;
+        //            sys_flag.controller_body_roll=0;
+        //            sys_flag.controller_ankle_left=0;
+        //            sys_flag.controller_ankle_right=0;
+        //            sys_flag.controller_foot_place=0;
+        //            ROS_INFO("task standing init from step: start");
+        //        }
+        //        else if(currentScene.flag.finish)
+        //        {
+        //            currentScene.flag.finish=0;
+        //            task.finishFlag=1;
+        //        }
+        //        else if(task.finishFlag){
+        //            task.finishFlag=0;
+        //            task.startFlag=0;
+        //            task.preId=TASK_STANDINGINIT_F_STEP;
+        //            task.id=TASK_IDLE_;
+        //            ROS_INFO("task standing init from step: finish");
+        //        }
 
 
-        break;
+        //        break;
     default:
         break;
     }
+
+    //    if(currentScene.flag.enable){
+    //        currentScene.frame++;
+
+    //        if(currentScene.flag.delay){
+    //            if(currentScene.flag.start==0){
+    //                currentScene.flag.start=1;
+    //                currentScene.frame=0;
+    //            }
+    //            else if(currentScene.frame>currentScene.numOfFrame)
+    //            {
+    //                currentScene.flag.enable=0;
+    //                currentScene.flag.finish=1;
+    //                currentScene.flag.delay=0;
+    //            }
+    //        }
+    //        else{
+    //            if(currentScene.flag.start==0){
+    //                currentScene.flag.start=1;
+    //                currentScene.frame=0;
+    //                for(unsigned char i=0;i<NUM_OF_SAM_;i++)
+    //                {
+    //                    pos12_double[i]=*(currentScene.beginPose+i);
+    //                    unsigned int b=*(currentScene.beginPose+i);
+    //                    unsigned int a=*(currentScene.endPose+i);
+    //                    delta_pos12[i]=((double)a-(double)b)/(double)currentScene.numOfFrame;
+    //                }
+
+
+    //            }
+    //            else if(currentScene.frame<currentScene.numOfFrame)
+    //            {
+    //                for(unsigned char i=0;i<NUM_OF_SAM_;i++)
+    //                {
+    //                    pos12_double[i]+=delta_pos12[i];
+    //                }
+    //            }
+    //            else{
+    //                currentScene.flag.enable=0;
+    //                currentScene.flag.finish=1;
+    //            }
+
+
+    //        }
+    //    }
 
     if(currentScene.flag.enable){
         currentScene.frame++;
@@ -978,29 +1041,19 @@ void task_handle(){
                 currentScene.frame=0;
                 for(unsigned char i=0;i<NUM_OF_SAM_;i++)
                 {
-                    pos12_double[i]=*(currentScene.beginPose+i);
-                    unsigned int b=*(currentScene.beginPose+i);
-                    unsigned int a=*(currentScene.endPose+i);
-                    delta_pos12[i]=((double)a-(double)b)/(double)currentScene.numOfFrame;
+                    posSetPointDegree[i]=*(currentScene.beginPose+i);
+                    double b=*(currentScene.beginPose+i);
+                    double a=*(currentScene.endPose+i);
+                    delta_posDegree[i]=((double)a-(double)b)/(double)currentScene.numOfFrame;
                 }
 
-                //                cout<<"pos12 double: ";
-                //                for(unsigned char i=0;i<25;i++){
-                //                    cout<<pos12_double[i]<<":";
-                //                }
-                //                cout<<endl;
 
-                //                cout<<"delta_pose12: ";
-                //                for(unsigned char i=0;i<25;i++){
-                //                    cout<<delta_pos12[i]<<":";
-                //                }
-                //                cout<<endl;
             }
             else if(currentScene.frame<currentScene.numOfFrame)
             {
                 for(unsigned char i=0;i<NUM_OF_SAM_;i++)
                 {
-                    pos12_double[i]+=delta_pos12[i];
+                    posSetPointDegree[i]+=delta_posDegree[i];
                 }
             }
             else{
@@ -1008,29 +1061,18 @@ void task_handle(){
                 currentScene.flag.finish=1;
             }
 
-            //            if(currentScene.flag.enable){
-            //                for (unsigned char i=0;i<NUM_OF_SAM_;i++){
-            //                    samPos12.SAMPos12[i]=(unsigned int)pos12_double[i];
-            //                    //                    currentControlledSamPos12[i]=samPos12.SAMPos12[i];
-            //                }
-            //                //                if(sys_flag.enable_sam)
-            //                //                    sam_pos12_pub.publish(samPos12);
-            //            }
+
         }
     }
 
-    // update motion generator
-    //    for (unsigned char i=0;i<NUM_OF_SAM_;i++){
-    //        samPos12.SAMPos12[i]=(unsigned int)pos12_double[i];
-    //    }
 }
 
-void Scene_class::setBeginPose(unsigned int *value)
+void Scene_class::setBeginPose(double *value)
 {
     beginPose = value;
 }
 
-void Scene_class::setEndPose(unsigned int *value)
+void Scene_class::setEndPose(double *value)
 {
     endPose = value;
 }
@@ -1052,30 +1094,25 @@ void Scene_class::setDelayScene(unsigned int fr)
 
 //unsigned int buf_beginPose[NUM_OF_SAM_];
 //unsigned int buf_endPose[NUM_OF_SAM_];
-void Scene_class::setUpMyScene(unsigned int fr, int *beginpose, int *endpose)
+
+void Scene_class::setUpMyScene(unsigned int fr, double *beginpose, double *endpose)
 {
-    mapSoftToHardPose(beginpose,this->buf_beginPose,NUM_OF_SAM_);
-    mapSoftToHardPose(endpose,this->buf_endPose,NUM_OF_SAM_);
+    //    mapSoftToHardPose(beginpose,this->buf_beginPose,NUM_OF_SAM_);
+    //    mapSoftToHardPose(endpose,this->buf_endPose,NUM_OF_SAM_);
+    //    this->setBeginPose(buf_beginPose);
+    //    this->setEndPose(buf_endPose);
+
     this->setNumOfFrame(fr);
-    this->setBeginPose(buf_beginPose);
-    this->setEndPose(buf_endPose);
+
     this->frame=0;
     this->flag.start=0;
     this->flag.finish=0;
     this->flag.enable=1;
     this->flag.delay=0;
 
-    //    cout<<"begin Pose:";
-    //    for(unsigned char i=0;i<25;i++){
-    //        cout<<(double)buf_beginPose[i]<<":";
+    this->setBeginPose(beginpose);
+    this->setEndPose(endpose);
 
-    //    }
-    //    cout<<endl;
-    //    cout<<"endpose:";
-    //    for(unsigned char i=0;i<25;i++){
-    //        cout<<(double)buf_endPose[i]<<":";
-    //    }
-    //    cout<<endl;
 }
 
 void Scene_class::setFrame(unsigned int value)
@@ -1095,11 +1132,77 @@ void Scene_class::mapHardToSoftPose(unsigned int *hardwarePose, int *softwarePos
 {
     for(unsigned char i=0;i<size;i++)
     {
-        *(softwarePose+i)=(unsigned int)((int)*(hardwarePose+i)-(int)samPos12_hardware[i]);
+        *(softwarePose+i)=(int)*(hardwarePose+i)-(int)samPos12_hardware[i];
     }
 }
 
+void Scene_class::mapPos12ToDegree(unsigned int *hardwarePose, double *degreePose, unsigned char size)
+{
+    for(unsigned char i=0;i<size;i++)
+    {
+        *(degreePose+i)=((double)*(hardwarePose+i)-(double)samPos12_hardware[i])*pos12bitTodegree;
+    }
+}
 
+//void Scene_class::mapDegreeToPos12(double *degreePose, unsigned int *hardwarePose, unsigned char size)
+//{
+//    for(unsigned char i=0;i<size;i++)
+//    {
+//        *(hardwarePose+i)=(unsigned int)((*(degreePose+i))*degreeToPose12+(double)samPos12_hardware[i]);
+//    }
+//}
+
+void sub_function_setPIDJoints(const uxa_motion_control::uxaSetPIDJointMsg::ConstPtr& msg){
+    unsigned char index= msg->pidJointId;
+    ROS_INFO("set pid joint %d",index);
+    switch(msg->pidEnable){
+    case 1:
+        cout<<"pid "<< (int)index<<" enable"<<endl;
+        sys_flag.controller_joint[index]=1;
+        break;
+    case 2:
+        pid_joint[index].KP=msg->Pvalue;
+        pid_joint[index].KI=msg->Ivalue;
+        pid_joint[index].KD=msg->Dvalue;
+        cout<< "KP = "<<pid_joint[index].KP <<"| KI = "<<pid_joint[index].KI<<"| KD = "<<pid_joint[index].KD<<endl;
+        break;
+    case 3:
+        pid_joint[index].set_point=msg->setPoint;
+        cout<< "setPoint = "<<pid_joint[index].set_point<<endl;
+        break;
+    case 4:
+        cout<<"pid  enable all"<<endl;
+        for(unsigned char i=0; i<12;i++){
+            sys_flag.controller_joint[i]=1;
+        }
+        break;
+
+    case 5:
+        cout<<"pid  disable all"<<endl;
+        for(unsigned char i=0; i<12;i++){
+            sys_flag.controller_joint[i]=0;
+        }
+        break;
+    case 6:
+        cout<<"set all pid:"<<endl;
+        for(unsigned char i=0; i<12;i++){
+            pid_joint[i].KP=msg->Pvalue;
+            pid_joint[i].KI=msg->Ivalue;
+            pid_joint[i].KD=msg->Dvalue;
+        }
+
+        cout<< "KP = "<<msg->Pvalue <<"| KI = "<<msg->Ivalue<<"| KD = "<<msg->Dvalue<<endl;
+        break;
+
+    default:
+        cout<<"pid "<< (int)index<<" disable"<<endl;
+        sys_flag.controller_joint[index]=0;
+        break;
+    }
+
+
+
+}
 void sub_function_setPID(const uxa_motion_control::uxaSetPIDMsg::ConstPtr& msg){
     switch(msg->pidtype){
     case PID_SET_BODY_PITCH_:
@@ -1434,19 +1537,8 @@ void sam_callback(const uxa_motion_control::SAMJointStateMsg::ConstPtr& msg){
     sys_flag.feedback_sam_available=1;
     for(unsigned char i=0;i<NUM_OF_SAM_;i++)
     {
-        //        unsigned int dataPos=(Store_chr[i*4+4]&0x7F)+((Store_chr[i*4+3]&0x1F)<<7);
-        //        unsigned char index=Store_chr[i*4+2]&0x1F;
-
-        //        if(abs((int)dataPos-(int)pre_samPos12[index])<DELTA_SAM_NOISE){
-        //            samPos12[index]=dataPos;
-        //            samPos12Avail[index]=1;
-
-        //        }else{
-        //            ROS_ERROR("error sam feedback: %d",index);
-        //        }
-
-        //        pre_currentSamPos12[index]=msg->SAMPos12[i];
-        currentSamPos12[i]=msg->SAMPos12[i];
+        currentSAMPosDegree[i]=msg->SAMPosDegree[i];
+        //        currentSAMPosDegree[i]=(currentSamPos12[i]-samPos12_hardware[i])*pos12bitTodegree;
         currentSamAvail[i]=msg->SAMPos12Avail[i];
     }
 }
@@ -1524,7 +1616,7 @@ void PID_control_init(){
     pid_foot_place.sampling_time=SAMPLING_TIME_;
     pid_foot_place.reset_parameters();
     pid_foot_place.KP=0;
-    pid_foot_place.KI=3000;//10000;
+    pid_foot_place.KI=1000;//10000;
     pid_foot_place.KD=0;
     pid_foot_place.I_limit=20;//70;
     pid_foot_place.D_limit=5;//50;
@@ -1631,6 +1723,19 @@ void PID_control_init(){
     pid_joint_6.D_limit=50;
     pid_joint_6.output_limit=250;
     pid_joint_6.set_point=0;
+
+    for(unsigned char i=0;i<12;i++)
+    {
+        pid_joint[i].sampling_time=SAMPLING_TIME_;
+        pid_joint[i].reset_parameters();
+        pid_joint[i].KP=5;
+        pid_joint[i].KI=40;
+        pid_joint[i].KD=0;
+        pid_joint[i].I_limit=300;
+        pid_joint[i].D_limit=50;
+        pid_joint[i].output_limit=400;
+        pid_joint[i].set_point=0;
+    }
 }
 void PID_reset()
 {
@@ -1653,8 +1758,29 @@ void PID_reset()
     pid_joint_4.reset_parameters();
     pid_joint_6.reset_parameters();
 
+
+    for(unsigned char i=0;i<12;i++)
+    {
+        pid_joint[i].reset_parameters();
+    }
     for(unsigned char i=0;i<NUM_OF_SAM_;i++)
     {
         controller_output[i]=0;
+    }
+}
+
+
+
+void PID_joint_enable(unsigned char stt){
+    if(stt){
+        for(unsigned char i=0;i<12;i++)
+        {
+            sys_flag.controller_joint[i]=1;
+        }
+    }else{
+        for(unsigned char i=0;i<12;i++)
+        {
+            sys_flag.controller_joint[i]=0;
+        }
     }
 }
