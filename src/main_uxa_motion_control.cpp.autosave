@@ -1099,6 +1099,14 @@ void Scene_class::mapHardToSoftPose(unsigned int *hardwarePose, int *softwarePos
     }
 }
 
+void Scene_class::mapDegreeToPos12(double *degreePose, unsigned int *hardwarePose, unsigned char size)
+{
+    for(unsigned char i=0;i<size;i++)
+    {
+        *(softwarePose+i)=(unsigned int)((int)*(hardwarePose+i)-(int)samPos12_hardware[i]);
+    }
+}
+
 
 void sub_function_setPID(const uxa_motion_control::uxaSetPIDMsg::ConstPtr& msg){
     switch(msg->pidtype){

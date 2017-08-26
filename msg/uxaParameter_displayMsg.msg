@@ -8,3 +8,5 @@ float64 CN7
 float64 CN8
 float64 CN9
 float64 CN10
+float64 CN11
+float64 CN12

@@ -282,6 +282,8 @@ public:
     void setUpMyScene(unsigned int fr, int *beginpose, int *endpose);
     void mapSoftToHardPose(int *softwarePose, unsigned int *hardwarePose, unsigned char size);
      void mapHardToSoftPose(unsigned int *hardwarePose, int *softwarePose, unsigned char size);
+     void mapDegreeToPos12(double *degreePose,unsigned int *hardwarePose,unsigned char size);
+     
 
     Scene_class(){
     }
