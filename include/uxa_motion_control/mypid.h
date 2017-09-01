@@ -36,6 +36,8 @@ public:
     double fb_filter;
     double pre_fb_filter;
 
+    unsigned char flag_enable:1;
+    double pre_output;
 
 
     void PID_controller(double feeback);

@@ -25,29 +25,34 @@ using namespace std;
 
 
 
-#define PID_SET_BODY_PITCH_ 1
-#define SETPOINT_SET_BODY_PITCH_ 2
-#define PID_SET_BODY_ROLL_1_2_ 3
-#define SETPOINT_SET_BODY_ROLL_1_2_ 4
+#define PID_SET_BODY_PITCH_         1
+#define SETPOINT_SET_BODY_PITCH_    2
 
-#define PID_ANKLE_LEFT_ 5
-#define SETPOINT_ANKLE_LEFT_ 6
+#define PID_SET_BODY_ROLL_          3
+#define SETPOINT_SET_BODY_ROLL_     4
 
-#define PID_ANKLE_RIGHT_ 7
-#define SETPOINT_ANKLE_RIGHT_ 8
+#define PID_IMPEDANCE_LEFT_         5
+#define SETPOINT_IMPEDANCE_LEFT_    6
 
-#define COM_POS_SETPOINT_ 9
+#define PID_IMPEDANCE_RIGHT_        7
+#define SETPOINT_IMPEDANCE_RIGHT_   8
 
-#define PID_FOOT_PLACE_ 10
-#define SETPOINT_FOOT_PLACE_ 11
+#define PID_ANKLE_LEFT_ROLL_        9
+#define SETPOINT_ANKLE_LEFT_ROLL_   10
 
-#define PID_SET_BODY_ROLL_8_9_ 12
-#define SETPOINT_SET_BODY_ROLL_8_9_ 13
+#define PID_ANKLE_RIGHT_ROLL_       11
+#define SETPOINT_ANKLE_RIGHT_ROLL_  12
 
-#define PID_JOINT_0_ 14
-#define PID_JOINT_1_ 15
-#define PID_JOINT_8_ 16
-#define PID_JOINT_9_ 17
+#define PID_ANKLE_LEFT_PITCH_       13
+#define SETPOINT_ANKLE_LEFT_PITCH_  14
+
+#define PID_ANKLE_RIGHT_PITCH_      15
+#define SETPOINT_ANKLE_RIGHT_PITCH_ 16
+
+#define PID_FOOT_PLACE_             17
+#define SETPOINT_FOOT_PLACE_        18
+
+
 
 
 ros::Publisher sensor_cmd_pub;
@@ -65,6 +70,19 @@ uxa_motion_control::SAMJointTorqueMsg samTorque;
 ros::Publisher plot_pub;
 uxa_motion_control::uxaParameter_displayMsg plotMsg;
 
+// task follow oders
+#define STEP_COM_TRANSFER_LEFT      0
+#define STEP_RIGHT_LEG_UP           1
+#define STEP_RIGHT_LEG_DOWN         2
+#define STEP_IMPEDANCE_CONTROL_1    3
+#define STEP_STABLE_WAIT_1          4
+#define STEP_RETURN_INIT_1          5
+#define STEP_COM_TRANSFER_RIGHT     6
+#define STEP_LEFT_LEG_UP            7
+#define STEP_LEFT_LEG_DOWN          8
+#define STEP_IMPEDANCE_CONTROL_2    9
+#define STEP_STABLE_WAIT_2          10
+#define STEP_RETURN_INIT_2          11
 
 void task_handle();
 void controller_handle();
@@ -161,74 +179,153 @@ int main(int argc, char **argv){
 
 
 void controller_handle(){
-
-    if(sys_flag.feedback_sensor_available){
-        sys_flag.feedback_sensor_available=0;
-
-        // using sensor feedback (imu)
-        if(sys_flag.controller_body_pitch){
-            pid_body_pitch.PID_type_5(imu.roll,0.8);
-        }
-        // using sensor feedback (zmp)
-        if(sys_flag.controller_ankle_left){
-            pid_ankle_left.PID_type_5(imu.pitch,0.8);
-            pid_joint_9.set_point=pid_ankle_left.output;
-
-            //            pid_ankle_right.PID_type_5(leftZMP.posX,0.8);
-            //            pid_joint_1.set_point=pid_ankle_right.output;
-
-        }
-
-
-        if(sys_flag.controller_ankle_right){
-            //            pid_ankle_right.PID_type_5(rightZMP.posX,0.8);
-        }
-    }
-
-
-
-
-    if(sys_flag.feedback_sam_available&&sys_flag.feedback_tfCal_available){
+    if(sys_flag.feedback_sam_available&&sys_flag.feedback_tfCal_available&&sys_flag.feedback_sensor_available){
         sys_flag.feedback_sam_available=0;
         sys_flag.feedback_tfCal_available=0;
+        sys_flag.feedback_sensor_available=0;
         // using sam feedback
-
         for(unsigned char i=0;i<12;i++){
             if(sys_flag.controller_joint[i]){
                 pid_joint[i].set_point=posSetPointDegree[i];
             }
         }
 
+        if(sys_flag.controller_ankle_left_roll){
+            if(leftZMP.amp>40){
+
+                if(pid_ankle_left_roll.flag_enable==0){
+                    pid_ankle_left_roll.I_term=pid_ankle_left_roll.pre_output;
+                }
+                pid_ankle_left_roll.flag_enable=1;
+                pid_ankle_left_roll.PID_type_5(leftZMP.posX,0.8);
+                pid_joint[1].set_point=-pid_ankle_left_roll.output;
+            }else{
+                if(pid_ankle_left_roll.flag_enable)
+                {
+                    pid_ankle_left_roll.pre_output=pid_ankle_left_roll.output;
+                    pid_ankle_left_roll.reset_parameters();
+                }
+                pid_ankle_left_roll.flag_enable=0;
+                pid_joint[1].set_point=-pid_ankle_left_roll.pre_output;
+            }
+        }
+
+        if(sys_flag.controller_ankle_right_roll){
+            if(rightZMP.amp>40){
+                if(pid_ankle_right_roll.flag_enable==0){
+                    pid_ankle_right_roll.I_term=pid_ankle_right_roll.pre_output;
+                }
+                pid_ankle_right_roll.flag_enable=1;
+                pid_ankle_right_roll.PID_type_5(rightZMP.posX,0.8);
+                pid_joint[0].set_point=-pid_ankle_right_roll.output;
+            }else{
+                if(pid_ankle_right_roll.flag_enable)
+                {
+                    pid_ankle_right_roll.pre_output=pid_ankle_right_roll.output;
+                    pid_ankle_right_roll.reset_parameters();
+                }
+                pid_ankle_right_roll.flag_enable=0;
+                pid_joint[0].set_point=-pid_ankle_right_roll.pre_output;
+            }
+        }
+
+        if(sys_flag.controller_ankle_left_pitch){
+            if(leftZMP.amp>40){
+                if(pid_ankle_left_pitch.flag_enable==0){
+                    pid_ankle_left_pitch.I_term=pid_ankle_left_pitch.pre_output;
+                }
+                pid_ankle_left_pitch.flag_enable=1;
+                pid_ankle_left_pitch.PID_type_5(leftZMP.posY,0.8);
+                pid_joint[3].set_point=-pid_ankle_left_pitch.output;
+            }else{
+                if(pid_ankle_left_pitch.flag_enable)
+                {
+                    pid_ankle_left_pitch.pre_output=pid_ankle_left_pitch.output;
+                    pid_ankle_left_pitch.reset_parameters();
+                }
+                pid_ankle_left_pitch.flag_enable=0;
+                pid_joint[3].set_point=-pid_ankle_left_pitch.pre_output;
+            }
+        }
+
+        if(sys_flag.controller_ankle_right_pitch){
+            if(rightZMP.amp>40){
+
+                if(pid_ankle_right_pitch.flag_enable==0){
+                    pid_ankle_right_pitch.I_term=pid_ankle_right_pitch.pre_output;
+                }
+                pid_ankle_right_pitch.flag_enable=1;
+                pid_ankle_right_pitch.PID_type_5(rightZMP.posY,0.8);
+                pid_joint[2].set_point=pid_ankle_right_pitch.output;
+            }else{
+                if(pid_ankle_right_pitch.flag_enable)
+                {
+                    pid_ankle_right_pitch.pre_output=pid_ankle_right_pitch.output;
+                    pid_ankle_right_pitch.reset_parameters();
+                }
+                pid_ankle_right_pitch.flag_enable=0;
+                pid_joint[2].set_point=pid_ankle_right_pitch.pre_output;
+            }
+        }
+
+
+        if(sys_flag.controller_impedance){
+            pid_impedance_right.PID_type_5(rightZMP.amp,0.8);
+            pid_impedance_left.PID_type_5(leftZMP.amp,0.8);
+            pid_impedace_ouputIntegrate_right-=pid_impedance_right.output;
+            pid_impedace_ouputIntegrate_left-=pid_impedance_left.output;
+
+
+            if(task.id==TASK_STEP_TEST){
+                //                if(taskStepCurrentScene==STEP_IMPEDANCE_CONTROL_1)
+                //                {
+
+                //                    pid_impedace_ouputIntegrate_right=constrain(pid_impedace_ouputIntegrate_right,-5,5);
+                //                    pid_impedace_ouputIntegrate_left=constrain(pid_impedace_ouputIntegrate_left,-5,15);
+                //                    pid_joint[4].set_point=pid_impedace_ouputIntegrate_right+posSetPointDegree[4];
+                //                    pid_joint[2].set_point=-pid_impedace_ouputIntegrate_right*0.6+posSetPointDegree[2];
+                //                    pid_joint[6].set_point=pid_impedace_ouputIntegrate_right*0.6+posSetPointDegree[6];
+
+                //                    pid_joint[5].set_point=-pid_impedace_ouputIntegrate_left+posSetPointDegree[5];
+                //                    pid_joint[3].set_point=pid_impedace_ouputIntegrate_left*0.6+posSetPointDegree[3];
+                //                    pid_joint[7].set_point=-pid_impedace_ouputIntegrate_left*0.6+posSetPointDegree[7];
+                //                }
+                //                else if(taskStepCurrentScene==STEP_IMPEDANCE_CONTROL_2){
+
+                //                    pid_impedace_ouputIntegrate_right=constrain(pid_impedace_ouputIntegrate_right,-5,15);
+                //                    pid_impedace_ouputIntegrate_left=constrain(pid_impedace_ouputIntegrate_left,-5,5);
+
+                //                    pid_joint[5].set_point=-pid_impedace_ouputIntegrate_left+posSetPointDegree[5];
+                //                    pid_joint[3].set_point=pid_impedace_ouputIntegrate_left*0.6+posSetPointDegree[3];
+                //                    pid_joint[7].set_point=-pid_impedace_ouputIntegrate_left*0.6+posSetPointDegree[7];
+
+                //                    pid_joint[4].set_point=pid_impedace_ouputIntegrate_right+posSetPointDegree[4];
+                //                    pid_joint[2].set_point=-pid_impedace_ouputIntegrate_right*0.6+posSetPointDegree[2];
+                //                    pid_joint[6].set_point=pid_impedace_ouputIntegrate_right*0.6+posSetPointDegree[6];
+                //                }
+            }
+
+        }
+
         //using tfCal feedback
         if(sys_flag.controller_foot_place){
             pid_foot_place.PID_type_5(footsDistance,0.8);
+            if(pid_foot_place.output<0)
+            {
+                pid_foot_place.output=0;
+            }
             if(task.id==TASK_STEP_TEST){
-                if(task.scene==2||task.scene==3){
+                if(taskStepCurrentScene==STEP_RIGHT_LEG_UP||taskStepCurrentScene==STEP_RIGHT_LEG_DOWN){
                     pid_joint[8].set_point=posSetPointDegree[8]-pid_foot_place.output;
                 }
-                else if(task.scene==7||task.scene==8){
+                else if(taskStepCurrentScene==STEP_LEFT_LEG_UP||taskStepCurrentScene==STEP_LEFT_LEG_DOWN){
                     pid_joint[9].set_point=posSetPointDegree[9]+pid_foot_place.output;
                 }
+
             }
 
 
-            plotMsg.CN1=posSetPointDegree[9];
-            plotMsg.CN2=pid_joint[0].output;
-            plotMsg.CN3=pid_joint[0].fb;
 
-            plotMsg.CN4=pid_joint[9].output;
-            plotMsg.CN5=pid_joint[9].fb;
-            plotMsg.CN6=pid_joint[9].set_point;
-
-
-            plotMsg.CN7=pid_foot_place.set_point;
-            plotMsg.CN8=pid_foot_place.output;
-            plotMsg.CN9=pid_foot_place.fb;
-
-            plotMsg.CN10=pid_joint[8].output;
-            plotMsg.CN11=pid_joint[8].fb;
-            plotMsg.CN12=pid_joint[8].set_point;
-            plot_pub.publish(plotMsg);
         }
 
         for(unsigned char i=0;i<12;i++){
@@ -238,131 +335,6 @@ void controller_handle(){
         }
 
 
-
-        //        if(sys_flag.controller_joint_3){
-        //            if(currentSamAvail[3]){
-        //                double angle=((double)currentSamPos12[3]-(double)samPos12_hardware[3])*pos12bitTodegree;
-        //                pid_joint_3.PID_type_5(angle,0.8);
-
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_joint_5){
-        //            if(currentSamAvail[5]){
-        //                double angle=((double)currentSamPos12[5]-(double)samPos12_hardware[5])*pos12bitTodegree;
-        //                pid_joint_5.PID_type_5(angle,0.8);
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_joint_7){
-        //            if(currentSamAvail[7]){
-        //                double angle=((double)currentSamPos12[7]-(double)samPos12_hardware[7])*pos12bitTodegree;
-        //                pid_joint_7.PID_type_5(angle,0.8);
-
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_joint_2){
-        //            if(currentSamAvail[2]){
-        //                double angle=((double)currentSamPos12[2]-(double)samPos12_hardware[2])*pos12bitTodegree;
-        //                pid_joint_2.PID_type_5(angle,0.8);
-
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_joint_4){
-        //            if(currentSamAvail[4]){
-        //                double angle=((double)currentSamPos12[4]-(double)samPos12_hardware[4])*pos12bitTodegree;
-        //                pid_joint_4.PID_type_5(angle,0.8);
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_joint_6){
-        //            if(currentSamAvail[6]){
-        //                double angle=((double)currentSamPos12[6]-(double)samPos12_hardware[6])*pos12bitTodegree;
-        //                pid_joint_6.PID_type_5(angle,0.8);
-
-        //            }
-        //        }
-
-
-        //        if(sys_flag.controller_joint_0){
-        //            if(currentSamAvail[0]){
-        //                double angle=((double)currentSamPos12[0]-(double)samPos12_hardware[0])*pos12bitTodegree;
-        //                pid_joint_0.PID_type_5(angle,0.8);
-
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_joint_1){
-        //            if(currentSamAvail[1]){
-        //                double angle=((double)currentSamPos12[1]-(double)samPos12_hardware[1])*pos12bitTodegree;
-        //                pid_joint_1.PID_type_5(angle,0.8);
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_joint_8){
-        //            if(currentSamAvail[8]){
-        //                double angle=((double)currentSamPos12[8]-(double)samPos12_hardware[8])*pos12bitTodegree;
-        //                pid_joint_8.PID_type_5(angle,0.8);
-
-        //            }
-        //        }
-        //            case 3:
-        //                PID_reset();
-        //                //                pid_ankle_left.set_point=0;
-        //                //                sys_flag.controller_ankle_left=0;
-        //                //                pid_body_roll_0_1.set_point=-6;
-        //                //                pid_body_roll_8_9.set_point=-6;
-        //                sys_flag.controller_foot_place=0;
-        ////                sys_flag.controller_ankle_left=0;
-        //                sys_flag.controller_joint_0=0;
-        //                sys_flag.controller_joint_1=0;
-        //                sys_flag.controller_joint_8=0;
-        //                sys_flag.controller_joint_9=0;
-        //                currentScene.mapHardToSoftPose(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-        //                currentScene.setUpMyScene(100,beginpose,pose_step_3);
-        //                cout<<"scene 3"<<endl;
-        //                break;
-        //        if(sys_flag.controller_joint_9){
-        //            if(currentSamAvail[9]){
-        //                double angle=((double)currentSamPos12[9]-(double)samPos12_hardware[9])*pos12bitTodegree;
-        //                pid_joint_9.PID_type_5(angle,0.8);
-
-        //            }
-        //        }
-
-        //        if(sys_flag.controller_body_roll){
-
-        //            if(currentSamAvail[1]&currentSamAvail[9]){
-        //                double angle_1=-((double)currentSamPos12[1]-(double)samPos12_hardware[1])*pos12bitTodegree;
-        //                double angle_9=((double)currentSamPos12[9]-(double)samPos12_hardware[9])*pos12bitTodegree;
-        //                pid_body_roll_0_1.PID_type_5(angle_1,0.8);
-        //                pid_body_roll_8_9.PID_type_5(angle_9,0.8);
-
-
-
-        //                if((task.id==TASK_STEP_TEST)&&(task.scene==1)){
-        //                    if(abs(pid_body_roll_0_1.er)<1){
-        //                        currentScene.flag.finish=1;
-        //                        cout<< "control stable"<< endl;
-        //                    }
-
-        //                }
-
-
-        //                if((task.id==TASK_STEP_TEST)&&(task.scene==3)){
-        //                    if(rightZMP.amp>50){
-        //                        currentScene.flag.finish=1;
-        //                        currentScene.flag.enable=0;
-        //                        cout<< "foot contact"<< endl;
-        //                    }
-
-        //                }
-
-        //            }
-
-        //        }
     }
 
 
@@ -377,82 +349,86 @@ void controller_handle(){
         }
     }
 
-//    if(sys_flag.controller_ankle_left|sys_flag.controller_ankle_right|sys_flag.controller_body_pitch|
-//            sys_flag.controller_body_roll|sys_flag.controller_foot_place|
-//            sys_flag.controller_joint_0|sys_flag.controller_joint_1|sys_flag.controller_joint_8|sys_flag.controller_joint_9){
-//        controller_on=1;
-//        //========
-
-
-
-//        controller_output[6]=-pid_body_pitch.output;
-//        controller_output[2]=-pid_body_pitch.output*0.6;
-//        controller_output[3]=pid_body_pitch.output*0.6;
-//        controller_output[7]=pid_body_pitch.output;
-//        //========
-//        //        controller_output[1]=-pid_body_roll_0_1.output;
-//        controller_output[1]=pid_joint_1.output;
-//        //        if(leftZMP.amp>50)
-//        //        {
-//        //            controller_output[1]-=pid_ankle_left.output;
-//        //        }
-
-//        //        controller_output[0]=-pid_body_roll_0_1.output;
-//        controller_output[0]=pid_joint_0.output;
-//        //        if(rightZMP.amp>50)
-//        //        {
-//        //            controller_output[0]-=pid_ankle_right.output;
-//        //        }
-
-//        //        controller_output[9]=pid_body_roll_8_9.output;//+pid_foot_place.output+pid_ankle_left.output;
-//        //        controller_output[8]=pid_body_roll_8_9.output-pid_foot_place.output;
-
-//        controller_output[9]=pid_joint_9.output;//+pid_foot_place.output+pid_ankle_left.output;
-//        controller_output[8]=pid_joint_8.output;//-pid_foot_place.output;
-
-
-//        controller_output[4]=pid_joint[4].output;
-
-
-//    }
 
 
     if(currentScene.flag.enable|controller_on){
 
-        //        if((task.id==TASK_STEP_TEST)&&(task.scene==1)){
-        //            if(abs(pid_joint[1].er)<1){
-        //                currentScene.flag.finish=1;
-        //                cout<< "control stable scene 0"<< endl;
-        //            }
-        //        }
 
 
-        if((task.id==TASK_STEP_TEST)&&(task.scene==3)){
-            if(rightZMP.amp>40){
-                currentScene.flag.finish=1;
-                currentScene.flag.enable=0;
-                cout<< "foot contact scene 2"<< endl;
+        if(task.id==TASK_STEP_TEST){
+            if(taskStepCurrentScene==STEP_RIGHT_LEG_DOWN){
+                if(rightZMP.amp>60){
+                    currentScene.flag.finish=1;
+                    currentScene.flag.enable=0;
+                    cout<< "foot contact scene 2"<< endl;
+                    //                    plotMsg.CN9=1;
+                }
+                //                else
+                //                    plotMsg.CN9=2;
+            }
+            else if(taskStepCurrentScene==STEP_LEFT_LEG_DOWN){
+                if(leftZMP.amp>60){
+                    currentScene.flag.finish=1;
+                    currentScene.flag.enable=0;
+                    cout<< "foot contact scene 6"<< endl;
+                    //                    plotMsg.CN9=3;
+                }
+                //                else
+                //                    plotMsg.CN9=4;
+            }
+
+            if(taskStepCurrentScene==STEP_STABLE_WAIT_1)
+            {
+
+
+                if(stable_pose_flag)
+                    stable_cycle++;
+                else
+                    stable_cycle=0;
+
+                if(stable_cycle>50)
+                {
+                    currentScene.flag.finish=1;
+                    currentScene.flag.enable=0;
+                    cout<< "finish stable wait 1 "<< endl;
+                    //                    plotMsg.CN9=5;
+                    stable_cycle=0;
+                }
+                //                else
+                //                    plotMsg.CN9=6;
+
+            }
+
+            else if(taskStepCurrentScene==STEP_STABLE_WAIT_2)
+            {
+
+
+                if(stable_pose_flag)
+                    stable_cycle++;
+                else
+                    stable_cycle=0;
+
+                if(stable_cycle>50)
+                {
+                    currentScene.flag.finish=1;
+                    currentScene.flag.enable=0;
+                    cout<< "finish stable wait 2 "<< endl;
+                    //                    plotMsg.CN9=7;
+                    stable_cycle=0;
+                }
+                //                else
+                //                    plotMsg.CN9=8;
             }
         }
 
-        //        if((task.id==TASK_STEP_TEST)&&(task.scene==6)){
-        //            if(abs(pid_joint[0].er)<1){
-        //                currentScene.flag.finish=1;
-        //                cout<< "control stable scene 5"<< endl;
-        //            }
-        //        }
-
-        if((task.id==TASK_STEP_TEST)&&(task.scene==8)){
-            if(leftZMP.amp>40){
-                currentScene.flag.finish=1;
-                currentScene.flag.enable=0;
-                cout<< "foot contact scene 7"<< endl;
-            }
-        }
 
         for (unsigned char i=0;i<NUM_OF_SAM_;i++){
             samPos12.SAMPos12[i]=(unsigned int)(posSetPointDegree[i]*degreeToPose12+(double)samPos12_hardware[i]+controller_output[i]);
-            currentControlledSamPos12[i]=samPos12.SAMPos12[i];
+
+            if(samPos12.SAMMode[i]==1)
+                currentControlledSamPos12[i]=samPos12.SAMPos12[i];
+            else if(  samPos12.SAMMode[i]==2)
+                currentControlledSamPos12[i]=(unsigned int)(currentSAMPosDegree[i]*degreeToPose12+(double)samPos12_hardware[i]);
         }
         if(sys_flag.enable_sam)
             sam_pos12_pub.publish(samPos12);
@@ -774,13 +750,14 @@ void task_handle(){
         }
         else if(currentScene.flag.finish)
         {
-            switch(task.scene){
+            taskStepCurrentScene=task.scene;
             double beginpose[NUM_OF_SAM_];
-            case 0:
+            switch(task.scene){
+            case STEP_COM_TRANSFER_LEFT:
                 PID_joint_enable(1);
 
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(100,beginpose,pose_step_0);
+                currentScene.setUpMyScene(100,beginpose,pose_step_comLeft);
 
                 //                pid_joint[0].set_point=6;
                 //                pid_joint[1].set_point=6;
@@ -803,10 +780,10 @@ void task_handle(){
                 //                sys_flag.controller_foot_place=1;
                 //                pid_foot_place.set_point=0.1;
 
-                cout<<"scene 0"<<endl;
+                cout<<"scene com transfer left"<<endl;
 
                 break;
-            case 1:
+            case STEP_RIGHT_LEG_UP:
 
                 PID_reset();
 
@@ -815,101 +792,157 @@ void task_handle(){
                 //                pid_joint_1.KP=0;
                 //                pid_joint_1.KI=60;
 
-                pid_joint[8].KI=80;
+                pid_joint[8].KI=200;
                 pid_joint[9].KI=200;
 
                 sys_flag.controller_foot_place=1;
-                pid_foot_place.set_point=0.14;
+                pid_foot_place.set_point=0.12;
                 pid_foot_place.I_term=-pid_joint[8].set_point;
 
 
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(numOfFrames_steping[0],beginpose,pose_step_2);
-                cout<<"scene 1"<<endl;
+                currentScene.setUpMyScene(numOfFrames_steping[0],beginpose,pose_step_rightUp);
+                cout<<"scene right leg up"<<endl;
                 break;
-            case 2:
+            case STEP_RIGHT_LEG_DOWN:
+
+                PID_reset();
+                //                sys_flag.controller_ankle_right_pitch=1;
+                //                sys_flag.controller_ankle_right_roll=1;
+                //                pid_ankle_right_pitch.pre_output=0;
+                //                pid_ankle_right_roll.pre_output=0;
+
+                //                sys_flag.controller_ankle_left_pitch=1;
+                //                                sys_flag.controller_ankle_left_roll=1;
+                //                pid_ankle_left_pitch.pre_output=0;
+                //                                pid_ankle_left_roll.pre_output=0;
+
+                pid_foot_place.I_term=-pid_joint[8].set_point;
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.setUpMyScene(numOfFrames_steping[1],beginpose,pose_step_rightDown);
+                cout<<"scene right leg down"<<endl;
+                break;
+
+            case STEP_IMPEDANCE_CONTROL_1:
                 PID_reset();
                 pid_foot_place.I_term=-pid_joint[8].set_point;
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.setUpMyScene(20,beginpose,pose_step_impedance_1);
 
-                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(numOfFrames_steping[1],beginpose,pose_step_3);
-                cout<<"scene 2"<<endl;
+                //                PID_reset();
+                //                pid_impedance_right.set_point=100;//120;
+                //                pid_impedance_left.set_point=100;//270;
+                //                sys_flag.controller_impedance=1;
+                //                                pid_foot_place.I_term=-pid_joint[8].set_point;
+                //                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                //                currentScene.setUpMyScene(30,beginpose,pose_step_rightDown);
+                cout<<"scene impedance control 1"<<endl;
                 break;
-            case 3:
-                PID_reset();
-                sys_flag.controller_foot_place=0;
-                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(20,beginpose,pose_step_7);
-                cout<<"scene 3"<<endl;
-                break;
-            case 4:
-                PID_reset();
-                PID_joint_enable(0);
-                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(100,beginpose,pose_step_1);
-                cout<<"scene 4"<<endl;
+            case STEP_STABLE_WAIT_1:
+                cout<<"scene stable 1"<<endl;
                 break;
 
-            case 5:
-                //                pid_joint_0.set_point=-8;
-                //                pid_joint_1.set_point=-8;
-                //                pid_joint_8.set_point=8;
-                //                pid_joint_9.set_point=8;
-                //                pid_joint_0.KP=0;
-                //                pid_joint_0.KI=40;
-                //                pid_joint_1.KP=0;
-                //                pid_joint_1.KI=40;
-                //                pid_joint_8.KP=0;
-                //                pid_joint_8.KI=40;
-                //                pid_joint_9.KP=0;
-                //                pid_joint_9.KI=40;
-                //                sys_flag.controller_joint_0=1;
-                //                sys_flag.controller_joint_1=1;
-                //                sys_flag.controller_joint_8=1;
-                //                sys_flag.controller_joint_9=1;
+            case STEP_RETURN_INIT_1:
+                PID_reset();
+                //                PID_joint_enable(0);
+                //                sys_flag.controller_foot_place=0;
+                pid_foot_place.I_term=-pid_joint[8].set_point;
+                sys_flag.controller_impedance=0;
+
+                //                sys_flag.controller_ankle_right_pitch=0;
+                //                sys_flag.controller_ankle_right_roll=0;
+                //                pid_ankle_right_pitch.pre_output=0;
+                //                pid_ankle_right_roll.pre_output=0;
+
+                //                sys_flag.controller_ankle_left_pitch=0;
+                //                sys_flag.controller_ankle_left_roll=0;
+                //                pid_ankle_left_pitch.pre_output=0;
+                //                pid_ankle_left_roll.pre_output=0;
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.setUpMyScene(100,beginpose,pose_step_init);
+                cout<<"scene return to init  pose"<<endl;
+                break;
+
+            case STEP_COM_TRANSFER_RIGHT:
                 PID_joint_enable(1);
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(100,beginpose,pose_step_8);
+                currentScene.setUpMyScene(100,beginpose,pose_step_comRight);
 
 
-                cout<<"scene 5"<<endl;
+                cout<<"scene COM transfer to right"<<endl;
 
                 break;
 
-            case 6:
+            case STEP_LEFT_LEG_UP:
 
                 PID_reset();
-                pid_joint[8].KI=200;
-                pid_joint[9].KI=80;
+                //                pid_joint[8].KI=200;
+                //                pid_joint[9].KI=80;
                 sys_flag.controller_foot_place=1;
-                pid_foot_place.set_point=0.14;
+                pid_foot_place.set_point=0.13;
                 pid_foot_place.I_term=pid_joint[9].set_point;
 
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(numOfFrames_steping[0],beginpose,pose_step_5);
-                cout<<"scene 6"<<endl;
+                currentScene.setUpMyScene(numOfFrames_steping[0],beginpose,pose_step_leftUp);
+                cout<<"scene left leg up"<<endl;
                 break;
 
-            case  7:
+            case  STEP_LEFT_LEG_DOWN:
+                PID_reset();
+                //                sys_flag.controller_ankle_right_pitch=1;
+                //                sys_flag.controller_ankle_right_roll=1;
+                //                pid_ankle_right_pitch.pre_output=0;
+                //                pid_ankle_right_roll.pre_output=0;
+
+                //                sys_flag.controller_ankle_left_pitch=1;
+                //                sys_flag.controller_ankle_left_roll=1;
+                //                pid_ankle_left_pitch.pre_output=0;
+                //                pid_ankle_left_roll.pre_output=0;
+                pid_foot_place.I_term=pid_joint[9].set_point;
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.setUpMyScene(numOfFrames_steping[1],beginpose,pose_step_leftDown);
+                cout<<"scene left leg down"<<endl;
+                break;
+            case STEP_IMPEDANCE_CONTROL_2:
                 PID_reset();
                 pid_foot_place.I_term=pid_joint[9].set_point;
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(numOfFrames_steping[1],beginpose,pose_step_6);
-                cout<<"scene 7"<<endl;
+                currentScene.setUpMyScene(20,beginpose,pose_step_impedance_2);
+                //                PID_reset();
+                //                pid_impedance_right.set_point=100;//300;
+                //                pid_impedance_left.set_point=100;//150;
+                //                sys_flag.controller_impedance=1;
+
+                //                pid_joint[0].set_point=0;
+                //                  pid_joint[1].set_point=0;
+                //                    pid_joint[8].set_point=0;
+                //                      pid_joint[9].set_point=0;
+
+                //                pid_foot_place.I_term=pid_joint[9].set_point;
+                //                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                //                currentScene.setUpMyScene(100,beginpose,pose_step_leftDown);
+                cout<<"scene impedance control 2"<<endl;
                 break;
-            case 8:
-                PID_reset();
-                sys_flag.controller_foot_place=0;
-                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(20,beginpose,pose_step_7);
-                cout<<"scene 8"<<endl;
+            case STEP_STABLE_WAIT_2:
+                cout<<"scene stable 2"<<endl;
                 break;
-            case 9:
+            case STEP_RETURN_INIT_2:
                 PID_reset();
                 PID_joint_enable(0);
+                sys_flag.controller_foot_place=0;
+                //                sys_flag.controller_impedance=0;
+                //                sys_flag.controller_ankle_right_pitch=0;
+                //                sys_flag.controller_ankle_right_roll=0;
+                //                pid_ankle_right_pitch.pre_output=0;
+                //                pid_ankle_right_roll.pre_output=0;
+
+                //                sys_flag.controller_ankle_left_pitch=0;
+                //                sys_flag.controller_ankle_left_roll=0;
+                //                pid_ankle_left_pitch.pre_output=0;
+                //                pid_ankle_left_roll.pre_output=0;
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(100,beginpose,pose_step_1);
-                cout<<"scene 9"<<endl;
+                currentScene.setUpMyScene(100,beginpose,pose_step_init);
+                cout<<"scene return to init pose"<<endl;
                 break;
 
             default:
@@ -928,7 +961,7 @@ void task_handle(){
                 break;
             }
 
-            currentScene.flag.finish=0;
+            currentScene.flag.finish=0;// a scene must be finish outside this region
             task.scene++;
         }
         else if(task.finishFlag){
@@ -971,56 +1004,121 @@ void task_handle(){
 
 
         //        break;
+    case TASK_STEP_SINUNOID:
+        if(task.startFlag==0){
+            ROS_INFO("task step sinunoid: start");
+            task.startFlag=1;
+            task.scene=0;
+            currentScene.flag.finish=1;
+            //            currentScene.flag.enable=1;
+
+            /*
+             * Your code begin from here
+             */
+            sys_flag.sinunoid_motion=0;
+            step_timer=0;
+
+
+        }
+        else if(currentScene.flag.finish)
+        {
+
+            switch(task.scene){
+            case 0:
+                double beginpose[NUM_OF_SAM_];
+
+                foot_left_position[0]=-FOOT_POS_X_OFFSET;
+                foot_left_position[1]=AcomY*sin(phiY_left)+foot_left_posY_offset;
+                double b;
+                b=FOOT_POS_Z_AMP*sin(phiZ_left);
+                if(b<0)
+                    b=0;
+                foot_left_position[2]=-BODY_HEIGHT_LEFT+b;
+
+                foot_right_position[0]=-FOOT_POS_X_OFFSET;
+                foot_right_position[1]=AcomY*sin(phiY_right)-foot_right_posY_offset;
+                b=FOOT_POS_Z_AMP*sin(phiZ_right);
+                if(b<0)
+                    b=0;
+                foot_right_position[2]=-BODY_HEIGHT_RIGHT+b;
+
+                inverseKinematic(foot_left_mat,foot_left_position[0],foot_left_position[1],foot_left_position[2],calAngle);
+                pose_step_sinunoid_init[1]=calAngle[5]*180/M_PI;
+                pose_step_sinunoid_init[3]=-calAngle[4]*180/M_PI;
+                pose_step_sinunoid_init[5]=-calAngle[3]*180/M_PI;
+                pose_step_sinunoid_init[7]=calAngle[2]*180/M_PI-BODY_TILT_OFFSET;
+                pose_step_sinunoid_init[9]=calAngle[1]*180/M_PI;
+                pose_step_sinunoid_init[11]=calAngle[0]*180/M_PI;
+                inverseKinematic(foot_right_mat,foot_right_position[0],foot_right_position[1],foot_right_position[2],calAngle);
+                pose_step_sinunoid_init[0]=calAngle[5]*180/M_PI;
+                pose_step_sinunoid_init[2]=calAngle[4]*180/M_PI;
+                pose_step_sinunoid_init[4]=calAngle[3]*180/M_PI;
+                pose_step_sinunoid_init[6]=-calAngle[2]*180/M_PI+BODY_TILT_OFFSET;
+                pose_step_sinunoid_init[8]=calAngle[1]*180/M_PI;
+                pose_step_sinunoid_init[10]=calAngle[0]*180/M_PI;
+
+                currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
+                currentScene.setUpMyScene(100,beginpose,pose_step_sinunoid_init);
+
+                break;
+            case 1:// step in left
+
+
+                setUp_stepMotion(STEP_MODE_ROTATE,STEP_LEGID_RIGHT,10);
+
+                break;
+            case 2://step right
+                setUp_stepMotion(STEP_MODE_ROTATE,STEP_LEGID_RIGHT,10);
+                break;
+            case 3://step left
+                setUp_stepMotion(STEP_MODE_IN,STEP_LEGID_RIGHT,0);
+
+                break;
+            case 4://step out right
+                setUp_stepMotion(STEP_MODE_NORMAL,STEP_LEGID_LEFT,0);
+                break;
+
+            case 5://step out right
+                setUp_stepMotion(STEP_MODE_NORMAL,STEP_LEGID_RIGHT,0);
+                break;
+            case 6://step out right
+                setUp_stepMotion(STEP_MODE_NORMAL,STEP_LEGID_LEFT,0);
+                break;
+            case 7://step out right
+                setUp_stepMotion(STEP_MODE_OUT,STEP_LEGID_RIGHT,0);
+                break;
+            case 8://step out right
+                setUp_stepMotion(STEP_MODE_ROTATE,STEP_LEGID_LEFT,10);
+                break;
+            case 9://step out right
+                setUp_stepMotion(STEP_MODE_ROTATE,STEP_LEGID_RIGHT,10);
+                break;
+            default:
+                sys_flag.sinunoid_motion=0;
+                flag_enable_step_in=0;
+                task.finishFlag=1;
+                break;
+            }
+
+            currentScene.flag.finish=0;
+            task.scene++;
+
+        }
+        else if(task.finishFlag){
+
+            task.finishFlag=0;
+            task.startFlag=0;
+            task.id=TASK_IDLE_;
+            task.preId=TASK_STEP_SINUNOID;
+            ROS_INFO("task step sinunoid: finish");
+        }
+        break;
     default:
         break;
     }
 
-    //    if(currentScene.flag.enable){
-    //        currentScene.frame++;
 
-    //        if(currentScene.flag.delay){
-    //            if(currentScene.flag.start==0){
-    //                currentScene.flag.start=1;
-    //                currentScene.frame=0;
-    //            }
-    //            else if(currentScene.frame>currentScene.numOfFrame)
-    //            {
-    //                currentScene.flag.enable=0;
-    //                currentScene.flag.finish=1;
-    //                currentScene.flag.delay=0;
-    //            }
-    //        }
-    //        else{
-    //            if(currentScene.flag.start==0){
-    //                currentScene.flag.start=1;
-    //                currentScene.frame=0;
-    //                for(unsigned char i=0;i<NUM_OF_SAM_;i++)
-    //                {
-    //                    pos12_double[i]=*(currentScene.beginPose+i);
-    //                    unsigned int b=*(currentScene.beginPose+i);
-    //                    unsigned int a=*(currentScene.endPose+i);
-    //                    delta_pos12[i]=((double)a-(double)b)/(double)currentScene.numOfFrame;
-    //                }
-
-
-    //            }
-    //            else if(currentScene.frame<currentScene.numOfFrame)
-    //            {
-    //                for(unsigned char i=0;i<NUM_OF_SAM_;i++)
-    //                {
-    //                    pos12_double[i]+=delta_pos12[i];
-    //                }
-    //            }
-    //            else{
-    //                currentScene.flag.enable=0;
-    //                currentScene.flag.finish=1;
-    //            }
-
-
-    //        }
-    //    }
-
-    if(currentScene.flag.enable){
+    if(currentScene.flag.enable&&(sys_flag.sinunoid_motion==0)){
         currentScene.frame++;
 
         if(currentScene.flag.delay){
@@ -1042,9 +1140,14 @@ void task_handle(){
                 for(unsigned char i=0;i<NUM_OF_SAM_;i++)
                 {
                     posSetPointDegree[i]=*(currentScene.beginPose+i);
+
                     double b=*(currentScene.beginPose+i);
                     double a=*(currentScene.endPose+i);
-                    delta_posDegree[i]=((double)a-(double)b)/(double)currentScene.numOfFrame;
+                    if(a==b){
+                        delta_posDegree[i]=0;
+                    }
+                    else
+                        delta_posDegree[i]=((double)a-(double)b)/(double)currentScene.numOfFrame;
                 }
 
 
@@ -1062,6 +1165,246 @@ void task_handle(){
             }
 
 
+        }
+    }else if(sys_flag.sinunoid_motion)
+    {
+        step_timer+=SAMPLING_TIME_;
+        if(step_timer>step_duration){
+            currentScene.flag.enable=0;
+            currentScene.flag.finish=1;
+        }
+        else{
+
+            //            if(flag_step_firstTime==0)
+            //            {
+            //                flag_step_firstTime=1;
+            //                flag_enable_step_in=1;
+            //            }
+            double damping_left;
+            double damping_right;
+
+            double a=FOOT_POS_Z_AMP*sin(omega*step_timer+phiZ_left)-FOOT_POS_Z_OFFSET;
+            if(a<0)
+            {
+                a=0;
+                if(step_left_status==STEP_UP)
+                    step_left_status=STEP_DOWN;
+
+                if(step_left_status==STEP_DOWN){
+                    if(flag_trigger_damping_left==0)
+                    {
+                        flag_trigger_damping_left=1;
+                        step_damping_timer_t0=step_timer;
+                        flag_enable_damping_left=1;
+                    }
+
+                    if(flag_enable_damping_left){
+
+                        damping_left=FOOT_POS_Z_DAMPING*sin(omega_damping*(step_timer-step_damping_timer_t0));
+                        if(damping_left<0)
+                        {
+                            flag_enable_damping_left=0;
+                            damping_left=0;
+                            step_left_status=STEP_STANCE;
+
+                        }
+                    }
+                }
+                //===========X motion process=============
+                flag_step_up_left=0;
+                flag_Xmotion_resetTimer_left=0;
+            }
+            else{
+                if(step_left_status==STEP_STANCE)
+                    step_left_status=STEP_UP;
+                flag_trigger_damping_left=0;
+                flag_enable_damping_left=0;
+                //===========X motion process=============
+                flag_step_up_left=1;
+            }
+
+            double b=FOOT_POS_Z_AMP*sin(omega*step_timer+phiZ_right)-FOOT_POS_Z_OFFSET;
+            if(b<0){
+                b=0;
+                //===========damping motion process=============
+                if(step_right_status==STEP_UP)
+                    step_right_status=STEP_DOWN;
+                if(step_right_status==STEP_DOWN){
+                    if(flag_trigger_damping_right==0)
+                    {
+                        flag_trigger_damping_right=1;
+                        step_damping_timer_t0=step_timer;
+                        flag_enable_damping_right=1;
+                    }
+
+                    if(flag_enable_damping_right){
+
+                        damping_right=FOOT_POS_Z_DAMPING*sin(omega_damping*(step_timer-step_damping_timer_t0));
+                        if(damping_right<0)
+                        {
+                            flag_enable_damping_right=0;
+                            damping_right=0;
+                            step_right_status=STEP_STANCE;
+                        }
+                    }
+                }
+                //===========X motion process=============
+                flag_step_up_right=0;
+                flag_Xmotion_resetTimer_right=0;
+
+            }
+            else{
+                //===========damping motion process=============
+                if(step_right_status==STEP_STANCE)
+                    step_right_status=STEP_UP;
+                flag_trigger_damping_right=0;
+                flag_enable_damping_right=0;
+
+                //===========X motion process=============
+                flag_step_up_right=1;
+            }
+
+
+            if(flag_step_up_left)
+            {
+                if(flag_Xmotion_resetTimer_left==0){
+                    flag_Xmotion_resetTimer_left=1;
+                    step_Xmotion_timer=0;
+                    rotate_step_count++;
+                }
+
+
+                if(flag_enable_step_in)
+                {
+                    double step_in_func=AcomX*(1-step_Xmotion_timer*omega_X/M_PI);
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-step_in_func-FOOT_POS_X_OFFSET;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)+step_in_func-FOOT_POS_X_OFFSET;
+                }else if(flag_enable_step_out){
+                    double step_out_func=AcomX*step_Xmotion_timer*omega_X/M_PI;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)+step_out_func-FOOT_POS_X_OFFSET;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-step_out_func-FOOT_POS_X_OFFSET;
+                }
+                else{
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-FOOT_POS_X_OFFSET;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-FOOT_POS_X_OFFSET;
+                }
+                step_Xmotion_timer+=SAMPLING_TIME_;
+
+                if(flag_enable_step_yaw){
+                    if(rotate_step_count==1){
+                        foot_left_yaw=Ayaw_left*sin(omega_yaw*step_Xmotion_timer+phiYaw);
+                        foot_right_yaw=Ayaw_right*sin(omega_yaw*step_Xmotion_timer+phiYaw);
+                    }else if(rotate_step_count==2) {
+                        foot_left_yaw=Ayaw_left*sin(omega_yaw*step_Xmotion_timer+phiYaw+M_PI/2);
+                        foot_right_yaw=Ayaw_right*sin(omega_yaw*step_Xmotion_timer+phiYaw+M_PI/2);
+                    }
+                    double c_y=cos(foot_left_yaw);
+                    double s_y=sin(foot_left_yaw);
+                    foot_left_mat[INDEX(1,1)]=c_y;
+                    foot_left_mat[INDEX(1,2)]=s_y;
+                    foot_left_mat[INDEX(2,1)]=-s_y;
+                    foot_left_mat[INDEX(2,2)]=c_y;
+                    c_y=cos(foot_right_yaw);
+                    s_y=-sin(foot_right_yaw);
+                    foot_right_mat[INDEX(1,1)]=c_y;
+                    foot_right_mat[INDEX(1,2)]=s_y;
+                    foot_right_mat[INDEX(2,1)]=-s_y;
+                    foot_right_mat[INDEX(2,2)]=c_y;
+                }
+
+            }else if(flag_step_up_right){
+                if(flag_Xmotion_resetTimer_right==0){
+                    flag_Xmotion_resetTimer_right=1;
+                    step_Xmotion_timer=0;
+                    rotate_step_count++;
+                }
+
+                if(flag_enable_step_in)
+                {
+                    double step_in_func=AcomX*(1-step_Xmotion_timer*omega_X/M_PI);
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)+step_in_func-FOOT_POS_X_OFFSET;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-step_in_func-FOOT_POS_X_OFFSET;
+                }else if(flag_enable_step_out){
+                    double step_out_func=AcomX*step_Xmotion_timer*omega_X/M_PI;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-step_out_func-FOOT_POS_X_OFFSET;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)+step_out_func-FOOT_POS_X_OFFSET;
+                }else{
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-FOOT_POS_X_OFFSET;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-FOOT_POS_X_OFFSET;
+                }
+                step_Xmotion_timer+=SAMPLING_TIME_;
+
+                if(flag_enable_step_yaw){
+
+                    if(rotate_step_count==1){
+                        foot_left_yaw=Ayaw_left*sin(omega_yaw*step_Xmotion_timer+phiYaw);
+                        foot_right_yaw=Ayaw_right*sin(omega_yaw*step_Xmotion_timer+phiYaw);
+                    }else if(rotate_step_count==2) {
+                        foot_left_yaw=Ayaw_left*sin(omega_yaw*step_Xmotion_timer+phiYaw+M_PI/2);
+                        foot_right_yaw=Ayaw_right*sin(omega_yaw*step_Xmotion_timer+phiYaw+M_PI/2);
+                    }
+
+                    double c_y=cos(foot_left_yaw);
+                    double s_y=sin(foot_left_yaw);
+                    foot_left_mat[INDEX(1,1)]=c_y;
+                    foot_left_mat[INDEX(1,2)]=s_y;
+                    foot_left_mat[INDEX(2,1)]=-s_y;
+                    foot_left_mat[INDEX(2,2)]=c_y;
+                    c_y=cos(foot_right_yaw);
+                    s_y=-sin(foot_right_yaw);
+                    foot_right_mat[INDEX(1,1)]=c_y;
+                    foot_right_mat[INDEX(1,2)]=s_y;
+                    foot_right_mat[INDEX(2,1)]=-s_y;
+                    foot_right_mat[INDEX(2,2)]=c_y;
+                }
+            }
+
+
+
+            foot_left_position[2]=-BODY_HEIGHT_LEFT+a-b*0.06+damping_left+damping_right;
+            foot_right_position[2]=-BODY_HEIGHT_RIGHT+b-a*0.06+damping_right+damping_left;
+
+
+            foot_left_position[1]=(AcomY*sin(omega*step_timer+phiY_left)+b*0.2)+foot_left_posY_offset;
+            foot_right_position[1]=(AcomY*sin(omega*step_timer+phiY_right)-a*0.2)-foot_right_posY_offset;
+
+
+            //rotation process
+            inverseKinematic(foot_left_mat,foot_left_position[0],foot_left_position[1],foot_left_position[2],calAngle);
+
+            posSetPointDegree[1]=calAngle[5]*180/M_PI;
+            posSetPointDegree[3]=-calAngle[4]*180/M_PI;
+            posSetPointDegree[5]=-calAngle[3]*180/M_PI;
+            posSetPointDegree[7]=calAngle[2]*180/M_PI-BODY_TILT_OFFSET;
+            posSetPointDegree[9]=calAngle[1]*180/M_PI;
+            posSetPointDegree[11]=calAngle[0]*180/M_PI;
+
+
+            plotMsg.CN1= foot_left_position[0];
+            plotMsg.CN2=foot_left_position[1];
+            plotMsg.CN3=foot_left_position[2];
+
+            plotMsg.CN4= foot_right_position[0];
+            plotMsg.CN5= foot_right_position[1];
+            plotMsg.CN6=foot_right_position[2];
+            inverseKinematic(foot_right_mat,foot_right_position[0],foot_right_position[1],foot_right_position[2],calAngle);
+
+            posSetPointDegree[0]=calAngle[5]*180/M_PI;
+            posSetPointDegree[2]=calAngle[4]*180/M_PI;
+            posSetPointDegree[4]=calAngle[3]*180/M_PI;
+            posSetPointDegree[6]=-calAngle[2]*180/M_PI+BODY_TILT_OFFSET;
+            posSetPointDegree[8]=calAngle[1]*180/M_PI;
+            posSetPointDegree[10]=calAngle[0]*180/M_PI;
+
+
+
+            plotMsg.CN7=foot_left_yaw;
+            plotMsg.CN8=foot_right_yaw;
+            plotMsg.CN9=posSetPointDegree[9];
+            plotMsg.CN10=currentSAMPosDegree[9];
+            plotMsg.CN11=pid_joint[8].output;
+            plotMsg.CN12=pid_joint[9].output;
+            plot_pub.publish(plotMsg);
         }
     }
 
@@ -1203,65 +1546,76 @@ void sub_function_setPIDJoints(const uxa_motion_control::uxaSetPIDJointMsg::Cons
 
 
 }
+
+
 void sub_function_setPID(const uxa_motion_control::uxaSetPIDMsg::ConstPtr& msg){
     switch(msg->pidtype){
-    case PID_SET_BODY_PITCH_:
-        pid_body_pitch.KP=msg->Pvalue;
-        pid_body_pitch.KI=msg->Ivalue;
-        pid_body_pitch.KD=msg->Dvalue;
-        ROS_INFO("PID_SET_BODY_PITCH_ KP=%f| KI=%f| KD=%f",pid_body_pitch.KP,pid_body_pitch.KI,pid_body_pitch.KD);
+    //    case PID_SET_BODY_PITCH_:
+    //        pid_body_pitch.KP=msg->Pvalue;
+    //        pid_body_pitch.KI=msg->Ivalue;
+    //        pid_body_pitch.KD=msg->Dvalue;
+    //        ROS_INFO("PID_SET_BODY_PITCH_ KP=%f| KI=%f| KD=%f",pid_body_pitch.KP,pid_body_pitch.KI,pid_body_pitch.KD);
+    //        break;
+    //    case SETPOINT_SET_BODY_PITCH_:
+    //        pid_body_pitch.set_point=msg->setPoint;
+    //        ROS_INFO("SETPOINT_SET_BODY_PITCH_ setpoint=%f",pid_body_pitch.set_point);
+    //        break;
+
+    case PID_IMPEDANCE_RIGHT_:
+        pid_impedance_right.KP=msg->Pvalue;
+        pid_impedance_right.KI=msg->Ivalue;
+        pid_impedance_right.KD=msg->Dvalue;
+        ROS_INFO("PID_IMPEDANCE_RIGHT KP=%f| KI=%f| KD=%f",pid_impedance_right.KP,pid_impedance_right.KI,pid_impedance_right.KD);
         break;
-    case SETPOINT_SET_BODY_PITCH_:
-        pid_body_pitch.set_point=msg->setPoint;
-        ROS_INFO("SETPOINT_SET_BODY_PITCH_ setpoint=%f",pid_body_pitch.set_point);
-        break;
-    case PID_SET_BODY_ROLL_1_2_:
-        pid_body_roll_0_1.KP=msg->Pvalue;
-        pid_body_roll_0_1.KI=msg->Ivalue;
-        pid_body_roll_0_1.KD=msg->Dvalue;
-        ROS_INFO("PID_SET_BODY_ROLL_ KP=%f| KI=%f| KD=%f",pid_body_roll_0_1.KP,pid_body_roll_0_1.KI,pid_body_roll_0_1.KD);
-        break;
-    case SETPOINT_SET_BODY_ROLL_1_2_:
-        pid_body_roll_0_1.set_point=msg->setPoint;
-        pid_body_roll_8_9.set_point=msg->setPoint;
-        ROS_INFO("SETPOINT_SET_BODY_ROLL_ setpoint=%f",pid_body_roll_0_1.set_point);
+    case SETPOINT_IMPEDANCE_RIGHT_:
+        pid_impedance_right.set_point=msg->setPoint;
+        ROS_INFO("SETPOINT_IMPEDANCE_RIGHT setpoint=%f",pid_impedance_right.set_point);
         break;
 
-    case PID_SET_BODY_ROLL_8_9_:
-        pid_body_roll_8_9.KP=msg->Pvalue;
-        pid_body_roll_8_9.KI=msg->Ivalue;
-        pid_body_roll_8_9.KD=msg->Dvalue;
-        ROS_INFO("PID_SET_BODY_ROLL_ KP=%f| KI=%f| KD=%f",pid_body_roll_8_9.KP,pid_body_roll_8_9.KI,pid_body_roll_8_9.KD);
+    case PID_ANKLE_LEFT_ROLL_:
+        pid_ankle_left_roll.KP=msg->Pvalue;
+        pid_ankle_left_roll.KI=msg->Ivalue;
+        pid_ankle_left_roll.KD=msg->Dvalue;
+        ROS_INFO("PID_ANKLE_LEFT_ROLL_ KP=%f| KI=%f| KD=%f",pid_ankle_left_roll.KP,pid_ankle_left_roll.KI,pid_ankle_left_roll.KD);
         break;
-    case SETPOINT_SET_BODY_ROLL_8_9_:
-        pid_body_roll_8_9.set_point=msg->setPoint;
-        ROS_INFO("SETPOINT_SET_BODY_ROLL_ setpoint=%f",pid_body_roll_8_9.set_point);
-        break;
-    case PID_ANKLE_LEFT_:
-        pid_ankle_left.KP=msg->Pvalue;
-        pid_ankle_left.KI=msg->Ivalue;
-        pid_ankle_left.KD=msg->Dvalue;
-        ROS_INFO("PID_ANKLE_LEFT_ KP=%f| KI=%f| KD=%f",pid_ankle_left.KP,pid_ankle_left.KI,pid_ankle_left.KD);
-        break;
-    case SETPOINT_ANKLE_LEFT_:
-        pid_ankle_left.set_point=msg->setPoint;
-        ROS_INFO("SETPOINT_ANKLE_LEFT_ setpoint=%f",pid_ankle_left.set_point);
-        break;
-    case COM_POS_SETPOINT_:
-        pid_ankle_left.I_limit=msg->I_limit;
-        //        constrain(COMposSetpoint,-100,100);
-        ROS_INFO(" pid_ankle_left.I_limit=%f", pid_ankle_left.I_limit);
-
-    case PID_ANKLE_RIGHT_:
-        pid_ankle_right.KP=msg->Pvalue;
-        pid_ankle_right.KI=msg->Ivalue;
-        pid_ankle_right.KD=msg->Dvalue;
-        ROS_INFO("PID_ANKLE_RIGHT_ KP=%f| KI=%f| KD=%f",pid_ankle_right.KP,pid_ankle_right.KI,pid_ankle_right.KD);
+    case SETPOINT_ANKLE_LEFT_ROLL_:
+        pid_ankle_left_roll.set_point=msg->setPoint;
+        ROS_INFO("SETPOINT_ANKLE_LEFT_ setpoint=%f",pid_ankle_left_roll.set_point);
         break;
 
-    case SETPOINT_ANKLE_RIGHT_:
-        pid_ankle_right.set_point=msg->setPoint;
-        ROS_INFO("SETPOINT_ANKLE_RIGHT_ setpoint=%f",pid_ankle_right.set_point);
+    case PID_ANKLE_RIGHT_ROLL_:
+        pid_ankle_right_roll.KP=msg->Pvalue;
+        pid_ankle_right_roll.KI=msg->Ivalue;
+        pid_ankle_right_roll.KD=msg->Dvalue;
+        ROS_INFO("PID_ANKLE_RIGHT_ROLL KP=%f| KI=%f| KD=%f",pid_ankle_right_roll.KP,pid_ankle_right_roll.KI,pid_ankle_right_roll.KD);
+        break;
+
+    case SETPOINT_ANKLE_RIGHT_ROLL_:
+        pid_ankle_right_roll.set_point=msg->setPoint;
+        ROS_INFO("SETPOINT_ANKLE_RIGHT_ROLL setpoint=%f",pid_ankle_right_roll.set_point);
+        break;
+
+    case PID_ANKLE_LEFT_PITCH_:
+        pid_ankle_left_pitch.KP=msg->Pvalue;
+        pid_ankle_left_pitch.KI=msg->Ivalue;
+        pid_ankle_left_pitch.KD=msg->Dvalue;
+        ROS_INFO("PID_ANKLE_LEFT_PITCH_ KP=%f| KI=%f| KD=%f",pid_ankle_left_pitch.KP,pid_ankle_left_pitch.KI,pid_ankle_left_pitch.KD);
+        break;
+    case SETPOINT_ANKLE_LEFT_PITCH_:
+        pid_ankle_left_pitch.set_point=msg->setPoint;
+        ROS_INFO("SETPOINT_ANKLE_LEFT_ setpoint=%f",pid_ankle_left_pitch.set_point);
+        break;
+
+    case PID_ANKLE_RIGHT_PITCH_:
+        pid_ankle_right_pitch.KP=msg->Pvalue;
+        pid_ankle_right_pitch.KI=msg->Ivalue;
+        pid_ankle_right_pitch.KD=msg->Dvalue;
+        ROS_INFO("PID_ANKLE_RIGHT_PITCH KP=%f| KI=%f| KD=%f",pid_ankle_right_pitch.KP,pid_ankle_right_pitch.KI,pid_ankle_right_pitch.KD);
+        break;
+
+    case SETPOINT_ANKLE_RIGHT_PITCH_:
+        pid_ankle_right_pitch.set_point=msg->setPoint;
+        ROS_INFO("SETPOINT_ANKLE_RIGHT_PITCH setpoint=%f",pid_ankle_right_pitch.set_point);
         break;
 
     case PID_FOOT_PLACE_:
@@ -1275,52 +1629,20 @@ void sub_function_setPID(const uxa_motion_control::uxaSetPIDMsg::ConstPtr& msg){
         ROS_INFO("SETPOINT_FOOT_PLACE_ setpoint=%f",pid_foot_place.set_point);
         break;
 
-    case PID_JOINT_0_:
-        pid_joint_0.KP=msg->Pvalue;
-        pid_joint_0.KI=msg->Ivalue;
-        pid_joint_0.KD=msg->Dvalue;
-        ROS_INFO("PID_JOINT_0_ KP=%f| KI=%f| KD=%f",pid_joint_0.KP,pid_joint_0.KI,pid_joint_0.KD);
-        break;
-
-    case PID_JOINT_1_:
-        pid_joint_1.KP=msg->Pvalue;
-        pid_joint_1.KI=msg->Ivalue;
-        pid_joint_1.KD=msg->Dvalue;
-        ROS_INFO("PID_JOINT_1_ KP=%f| KI=%f| KD=%f",pid_joint_1.KP,pid_joint_1.KI,pid_joint_1.KD);
-        break;
-
-    case PID_JOINT_8_:
-        pid_joint_8.KP=msg->Pvalue;
-        pid_joint_8.KI=msg->Ivalue;
-        pid_joint_8.KD=msg->Dvalue;
-        ROS_INFO("PID_JOINT_8_ KP=%f| KI=%f| KD=%f",pid_joint_8.KP,pid_joint_8.KI,pid_joint_8.KD);
-        break;
-
-    case PID_JOINT_9_:
-        pid_joint_9.KP=msg->Pvalue;
-        pid_joint_9.KI=msg->Ivalue;
-        pid_joint_9.KD=msg->Dvalue;
-        ROS_INFO("PID_JOINT_0_ KP=%f| KI=%f| KD=%f",pid_joint_9.KP,pid_joint_9.KI,pid_joint_9.KD);
-        break;
 
     default:
-        ROS_INFO("PID_SET_BODY_PITCH_ KP=%f| KI=%f| KD=%f",pid_body_pitch.KP,pid_body_pitch.KI,pid_body_pitch.KD);
-        ROS_INFO("SETPOINT_SET_BODY_PITCH_ setpoint=%f",pid_body_pitch.set_point);
+        //        ROS_INFO("PID_SET_BODY_PITCH_ KP=%f| KI=%f| KD=%f",pid_body_pitch.KP,pid_body_pitch.KI,pid_body_pitch.KD);
+        //        ROS_INFO("SETPOINT_SET_BODY_PITCH_ setpoint=%f",pid_body_pitch.set_point);
 
-        ROS_INFO("PID_SET_BODY_ROLL_ KP=%f| KI=%f| KD=%f",pid_body_roll_0_1.KP,pid_body_roll_0_1.KI,pid_body_roll_0_1.KD);
-        ROS_INFO("SETPOINT_SET_BODY_ROLL_ setpoint=%f",pid_body_roll_0_1.set_point);
+        //        ROS_INFO("PID_SET_BODY_ROLL_ KP=%f| KI=%f| KD=%f",pid_body_roll_0_1.KP,pid_body_roll_0_1.KI,pid_body_roll_0_1.KD);
+        //        ROS_INFO("SETPOINT_SET_BODY_ROLL_ setpoint=%f",pid_body_roll_0_1.set_point);
 
-        ROS_INFO("PID_ANKLE_LEFT_ KP=%f| KI=%f| KD=%f",pid_ankle_left.KP,pid_ankle_left.KI,pid_ankle_left.KD);
-        ROS_INFO("SETPOINT_ANKLE_LEFT_ setpoint=%f",pid_ankle_left.set_point);
-        ROS_INFO("PID_ANKLE_RIGHT_ KP=%f| KI=%f| KD=%f",pid_ankle_right.KP,pid_ankle_right.KI,pid_ankle_right.KD);
-        ROS_INFO("SETPOINT_ANKLE_RIGHT_ setpoint=%f",pid_ankle_right.set_point);
+        ROS_INFO("PID_ANKLE_LEFT_ROLL_ KP=%f| KI=%f| KD=%f| Setpoint=%f",pid_ankle_left_roll.KP,pid_ankle_left_roll.KI,pid_ankle_left_roll.KD,pid_ankle_left_roll.set_point);
+        ROS_INFO("PID_ANKLE_RIGHT_ROLL KP=%f| KI=%f| KD=%f| Setpoint=%f",pid_ankle_right_roll.KP,pid_ankle_right_roll.KI,pid_ankle_right_roll.KD,pid_ankle_right_roll.set_point);
+        ROS_INFO("PID_FOOT_PLACE_ KP=%f| KI=%f| KD=%f| Setpoint=%f",pid_foot_place.KP,pid_foot_place.KI,pid_foot_place.KD,pid_foot_place.set_point);
+        ROS_INFO("PID_ANKLE_LEFT_pitch_ KP=%f| KI=%f| KD=%f| Setpoint=%f",pid_ankle_left_pitch.KP,pid_ankle_left_pitch.KI,pid_ankle_left_pitch.KD,pid_ankle_left_pitch.set_point);
+        ROS_INFO("PID_ANKLE_RIGHT_pitch KP=%f| KI=%f| KD=%f| Setpoint=%f",pid_ankle_right_pitch.KP,pid_ankle_right_pitch.KI,pid_ankle_right_pitch.KD,pid_ankle_right_pitch.set_point);
 
-        ROS_INFO("PID_FOOT_PLACE_ KP=%f| KI=%f| KD=%f",pid_foot_place.KP,pid_foot_place.KI,pid_foot_place.KD);
-        ROS_INFO("SETPOINT_FOOT_PLACE_ setpoint=%f",pid_foot_place.set_point);
-        ROS_INFO("PID_JOINT_0_ KP=%f| KI=%f| KD=%f",pid_joint_0.KP,pid_joint_0.KI,pid_joint_0.KD);
-        ROS_INFO("PID_JOINT_1_ KP=%f| KI=%f| KD=%f",pid_joint_1.KP,pid_joint_1.KI,pid_joint_1.KD);
-        ROS_INFO("PID_JOINT_8_ KP=%f| KI=%f| KD=%f",pid_joint_8.KP,pid_joint_8.KI,pid_joint_8.KD);
-        ROS_INFO("PID_JOINT_0_ KP=%f| KI=%f| KD=%f",pid_joint_9.KP,pid_joint_9.KI,pid_joint_9.KD);
         break;
     }
 }
@@ -1427,7 +1749,17 @@ void sub_function_cmd(const uxa_motion_control::motionCmdMsg::ConstPtr& msg){
             ROS_ERROR("error task order, pre task id: %d", task.preId);
         }
         break;
+    case MOTION_SET_SINUNOID_F_STANDINGINIT:
+        if(task.preId==TASK_STANDINGINIT_F_STANDING|task.preId==TASK_STEP_SINUNOID|task.preId==TASK_STANDINGINIT_F_STEP){
+            ROS_INFO("MOTION_SET_SINUNOID_F_STANDINGINIT %d", msg->command);
+            task.id=TASK_STEP_SINUNOID;
+        }else{
+            ROS_ERROR("error task order, pre task id: %d", task.preId);
+        }
 
+        //==========================
+        task.id=TASK_STEP_SINUNOID;
+        break;
 
     case MOTION_DISPLAY_SAM_CONTROL:
         ROS_INFO("DISPLAY_SAM_CONTROL: %d", msg->command);
@@ -1462,22 +1794,40 @@ void sub_function_cmd(const uxa_motion_control::motionCmdMsg::ConstPtr& msg){
         sys_flag.controller_body_roll=0;
         break;
 
-    case MOTION_ENALBLE_CONTROL_ANKLE_LEFT:
-        ROS_INFO("MOTION_ENALBLE_CONTROL_ANKLE_LEFT: %d", msg->command);
-        sys_flag.controller_ankle_left=1;
+    case MOTION_ENALBLE_CONTROL_ANKLE_LEFT_ROLL:
+        ROS_INFO("MOTION_ENALBLE_CONTROL_ANKLE_LEFT_ROLL: %d", msg->command);
+        sys_flag.controller_ankle_left_roll=1;
         break;
-    case MOTION_DISABLE_CONTROL_ANKLE_LEFT:
-        ROS_INFO("MOTION_DISABLE_CONTROL_ANKLE_LEFT: %d", msg->command);
-        sys_flag.controller_ankle_left=0;
+    case MOTION_DISABLE_CONTROL_ANKLE_LEFT_ROLL:
+        ROS_INFO("MOTION_DISABLE_CONTROL_ANKLE_LEFT_ROLL: %d", msg->command);
+        sys_flag.controller_ankle_left_roll=0;
         break;
 
-    case MOTION_ENALBLE_CONTROL_ANKLE_RIGHT:
-        ROS_INFO("MOTION_ENALBLE_CONTROL_ANKLE_RIGHT: %d", msg->command);
-        sys_flag.controller_ankle_right=1;
+    case MOTION_ENALBLE_CONTROL_ANKLE_RIGHT_ROLL:
+        ROS_INFO("MOTION_ENALBLE_CONTROL_ANKLE_RIGHT_ROLL: %d", msg->command);
+        sys_flag.controller_ankle_right_roll=1;
         break;
-    case MOTION_DISABLE_CONTROL_ANKLE_RIGHT:
-        ROS_INFO("MOTION_DISABLE_CONTROL_ANKLE_RIGHT: %d", msg->command);
-        sys_flag.controller_ankle_right=0;
+    case MOTION_DISABLE_CONTROL_ANKLE_RIGHT_ROLL:
+        ROS_INFO("MOTION_DISABLE_CONTROL_ANKLE_RIGHT_ROLL: %d", msg->command);
+        sys_flag.controller_ankle_right_roll=0;
+        break;
+
+    case MOTION_ENALBLE_CONTROL_ANKLE_LEFT_PITCH:
+        ROS_INFO("MOTION_ENALBLE_CONTROL_ANKLE_LEFT_pitch: %d", msg->command);
+        sys_flag.controller_ankle_left_pitch=1;
+        break;
+    case MOTION_DISABLE_CONTROL_ANKLE_LEFT_PITCH:
+        ROS_INFO("MOTION_DISABLE_CONTROL_ANKLE_LEFT_pitch: %d", msg->command);
+        sys_flag.controller_ankle_left_pitch=0;
+        break;
+
+    case MOTION_ENALBLE_CONTROL_ANKLE_RIGHT_PITCH:
+        ROS_INFO("MOTION_ENALBLE_CONTROL_ANKLE_RIGHT_pitch: %d", msg->command);
+        sys_flag.controller_ankle_right_pitch=1;
+        break;
+    case MOTION_DISABLE_CONTROL_ANKLE_RIGHT_PITCH:
+        ROS_INFO("MOTION_DISABLE_CONTROL_ANKLE_RIGHT_pitch: %d", msg->command);
+        sys_flag.controller_ankle_right_pitch=0;
         break;
 
     case MOTION_ENALBLE_CONTROL_FOOT_PLACE:
@@ -1490,14 +1840,6 @@ void sub_function_cmd(const uxa_motion_control::motionCmdMsg::ConstPtr& msg){
         break;
 
 
-    case MOTION_ENALBLE_CONTROL_JOINT_8:
-        ROS_INFO("MOTION_ENALBLE_CONTROL_JOINT_8: %d", msg->command);
-        sys_flag.controller_joint_8=1;
-        break;
-    case MOTION_DISABLE_CONTROL_JOINT_8:
-        ROS_INFO("MOTION_DISABLE_CONTROL_JOINT_8: %d", msg->command);
-        sys_flag.controller_joint_8=0;
-        break;
     default:
         ROS_INFO("feeback disable all : %d", msg->command);
         sam_command.command=SAM_FB_TURNOFF;
@@ -1530,6 +1872,21 @@ void sensor_callback(const uxa_motion_control::dataSensorMsg::ConstPtr& msg){
     imu.roll=msg->body_roll;
     imu.pitch=msg->body_pitch;
     imu.yaw=msg->body_yaw;
+
+    rightZMP.amp_filtered=rightZMP.amp_filtered*0.9+0.1*rightZMP.amp;
+    rightZMP.delta_amp=rightZMP.amp_filtered-rightZMP.pre_amp;
+    rightZMP.pre_amp=rightZMP.amp_filtered;
+
+    leftZMP.amp_filtered=leftZMP.amp_filtered*0.9+0.1*leftZMP.amp;
+    leftZMP.delta_amp=leftZMP.amp_filtered-leftZMP.pre_amp;
+    leftZMP.pre_amp=leftZMP.amp_filtered;
+
+    if((abs(rightZMP.delta_amp)<1.2)&&(abs(leftZMP.delta_amp<1.2)))
+        stable_pose_flag=1;
+    else
+        stable_pose_flag=0;
+
+    delta_amp=abs(leftZMP.amp-rightZMP.amp);
 }
 
 void sam_callback(const uxa_motion_control::SAMJointStateMsg::ConstPtr& msg){
@@ -1561,204 +1918,106 @@ void sam_tfCal_callback(const uxa_motion_control::SAMtfCalMsg::ConstPtr& msg){
 
 
 void PID_control_init(){
-    //    pid_body_roll_0_1 =new myPID();
-    //    pid_body_pitch = new myPID();
-    pid_body_roll_0_1.sampling_time=SAMPLING_TIME_;
-    pid_body_roll_0_1.reset_parameters();
-    pid_body_roll_0_1.KP=10;
-    pid_body_roll_0_1.KI=40;
-    pid_body_roll_0_1.KD=0;
-    pid_body_roll_0_1.I_limit=100;
-    pid_body_roll_0_1.D_limit=50;
-    pid_body_roll_0_1.output_limit=200;
-    pid_body_roll_0_1.set_point=body_roll_setpoint;
+    pid_impedance_right.sampling_time=SAMPLING_TIME_;
+    pid_impedance_right.reset_parameters();
+    pid_impedance_right.KP=0.005;
+    pid_impedance_right.KI=0;
+    pid_impedance_right.KD=0;
+    pid_impedance_right.I_limit=0.1;
+    pid_impedance_right.D_limit=0;
+    pid_impedance_right.output_limit=1;
+    pid_impedance_right.set_point=100;
 
-    pid_body_roll_8_9.sampling_time=SAMPLING_TIME_;
-    pid_body_roll_8_9.reset_parameters();
-    pid_body_roll_8_9.KP=10;
-    pid_body_roll_8_9.KI=40;
-    pid_body_roll_8_9.KD=0;
-    pid_body_roll_8_9.I_limit=100;
-    pid_body_roll_8_9.D_limit=50;
-    pid_body_roll_8_9.output_limit=200;
-    pid_body_roll_8_9.set_point=body_roll_setpoint;
+    pid_impedance_left.sampling_time=SAMPLING_TIME_;
+    pid_impedance_left.reset_parameters();
+    pid_impedance_left.KP=0.005;
+    pid_impedance_left.KI=0;
+    pid_impedance_left.KD=0;
+    pid_impedance_left.I_limit=0.1;
+    pid_impedance_left.D_limit=0;
+    pid_impedance_left.output_limit=1;
+    pid_impedance_left.set_point=100;
 
-    pid_body_pitch.sampling_time=SAMPLING_TIME_;
-    pid_body_pitch.reset_parameters();
-    pid_body_pitch.KP=1;
-    pid_body_pitch.KI=30;//70;
-    pid_body_pitch.KD=0;
-    pid_body_pitch.I_limit=100;
-    pid_body_pitch.D_limit=50;
-    pid_body_pitch.output_limit=200;
-    pid_body_pitch.set_point=body_pitch_setpoint;
 
-    pid_ankle_left.sampling_time=SAMPLING_TIME_;
-    pid_ankle_left.reset_parameters();
-    pid_ankle_left.KP=0;//10;
-    pid_ankle_left.KI=5;//5;
-    pid_ankle_left.KD=0;//0.5;
-    pid_ankle_left.I_limit=15;//100;
-    pid_ankle_left.D_limit=5;//50;
-    pid_ankle_left.output_limit=20;//200;
-    pid_ankle_left.set_point=ankle_left_COP_setpoint;
 
-    pid_ankle_right.sampling_time=SAMPLING_TIME_;
-    pid_ankle_right.reset_parameters();
-    pid_ankle_right.KP=0;
-    pid_ankle_right.KI=2;
-    pid_ankle_right.KD=0;
-    pid_ankle_right.I_limit=5;
-    pid_ankle_right.D_limit=5;
-    pid_ankle_right.output_limit=10;
-    pid_ankle_right.set_point=ankle_right_COP_setpoint;
+    pid_ankle_right_pitch.sampling_time=SAMPLING_TIME_;
+    pid_ankle_right_pitch.reset_parameters();
+    pid_ankle_right_pitch.KP=0;
+    pid_ankle_right_pitch.KI=1;
+    pid_ankle_right_pitch.KD=0;
+    pid_ankle_right_pitch.I_limit=15;
+    pid_ankle_right_pitch.D_limit=5;
+    pid_ankle_right_pitch.output_limit=20;
+    pid_ankle_right_pitch.set_point=ankle_right_pitch_setpoint;
+
+
+    pid_ankle_right_roll.sampling_time=SAMPLING_TIME_;
+    pid_ankle_right_roll.reset_parameters();
+    pid_ankle_right_roll.KP=0;
+    pid_ankle_right_roll.KI=1;
+    pid_ankle_right_roll.KD=0;
+    pid_ankle_right_roll.I_limit=15;
+    pid_ankle_right_roll.D_limit=5;
+    pid_ankle_right_roll.output_limit=20;
+    pid_ankle_right_roll.set_point=ankle_right_roll_setpoint;
+
+    pid_ankle_left_pitch.sampling_time=SAMPLING_TIME_;
+    pid_ankle_left_pitch.reset_parameters();
+    pid_ankle_left_pitch.KP=0;
+    pid_ankle_left_pitch.KI=1;
+    pid_ankle_left_pitch.KD=0;
+    pid_ankle_left_pitch.I_limit=15;
+    pid_ankle_left_pitch.D_limit=5;
+    pid_ankle_left_pitch.output_limit=20;
+    pid_ankle_left_pitch.set_point=ankle_left_pitch_setpoint;
+
+
+    pid_ankle_left_roll.sampling_time=SAMPLING_TIME_;
+    pid_ankle_left_roll.reset_parameters();
+    pid_ankle_left_roll.KP=0;
+    pid_ankle_left_roll.KI=1;
+    pid_ankle_left_roll.KD=0;
+    pid_ankle_left_roll.I_limit=15;
+    pid_ankle_left_roll.D_limit=5;
+    pid_ankle_left_roll.output_limit=20;
+    pid_ankle_left_roll.set_point=ankle_left_roll_setpoint;
 
     pid_foot_place.sampling_time=SAMPLING_TIME_;
     pid_foot_place.reset_parameters();
     pid_foot_place.KP=0;
     pid_foot_place.KI=1000;//10000;
     pid_foot_place.KD=0;
-    pid_foot_place.I_limit=20;//70;
+    pid_foot_place.I_limit=15;//70;
     pid_foot_place.D_limit=5;//50;
     pid_foot_place.output_limit=30;//100;
     pid_foot_place.set_point=foot_place_setpoint;
 
-    pid_joint_0.sampling_time=SAMPLING_TIME_;
-    pid_joint_0.reset_parameters();
-    pid_joint_0.KP=5;
-    pid_joint_0.KI=40;
-    pid_joint_0.KD=0;
-    pid_joint_0.I_limit=200;
-    pid_joint_0.D_limit=50;
-    pid_joint_0.output_limit=250;
-    pid_joint_0.set_point=body_roll_setpoint;
-
-    pid_joint_1.sampling_time=SAMPLING_TIME_;
-    pid_joint_1.reset_parameters();
-    pid_joint_1.KP=5;
-    pid_joint_1.KI=40;
-    pid_joint_1.KD=0;
-    pid_joint_1.I_limit=250;
-    pid_joint_1.D_limit=50;
-    pid_joint_1.output_limit=300;
-    pid_joint_1.set_point=0;
-
-    pid_joint_8.sampling_time=SAMPLING_TIME_;
-    pid_joint_8.reset_parameters();
-    pid_joint_8.KP=5;
-    pid_joint_8.KI=40;
-    pid_joint_8.KD=0;
-    pid_joint_8.I_limit=200;
-    pid_joint_8.D_limit=50;
-    pid_joint_8.output_limit=250;
-    pid_joint_8.set_point=0;
-
-
-    pid_joint_9.sampling_time=SAMPLING_TIME_;
-    pid_joint_9.reset_parameters();
-    pid_joint_9.KP=5;
-    pid_joint_9.KI=40;
-    pid_joint_9.KD=0;
-    pid_joint_9.I_limit=300;
-    pid_joint_9.D_limit=50;
-    pid_joint_9.output_limit=400;
-    pid_joint_9.set_point=0;
-
-    pid_joint_3.sampling_time=SAMPLING_TIME_;
-    pid_joint_3.reset_parameters();
-    pid_joint_3.KP=5;
-    pid_joint_3.KI=40;
-    pid_joint_3.KD=0;
-    pid_joint_3.I_limit=200;
-    pid_joint_3.D_limit=50;
-    pid_joint_3.output_limit=250;
-    pid_joint_3.set_point=0;
-
-    pid_joint_5.sampling_time=SAMPLING_TIME_;
-    pid_joint_5.reset_parameters();
-    pid_joint_5.KP=5;
-    pid_joint_5.KI=40;
-    pid_joint_5.KD=0;
-    pid_joint_5.I_limit=200;
-    pid_joint_5.D_limit=50;
-    pid_joint_5.output_limit=250;
-    pid_joint_5.set_point=0;
-
-    pid_joint_7.sampling_time=SAMPLING_TIME_;
-    pid_joint_7.reset_parameters();
-    pid_joint_7.KP=5;
-    pid_joint_7.KI=40;
-    pid_joint_7.KD=0;
-    pid_joint_7.I_limit=200;
-    pid_joint_7.D_limit=50;
-    pid_joint_7.output_limit=250;
-    pid_joint_7.set_point=0;
-
-    pid_joint_2.sampling_time=SAMPLING_TIME_;
-    pid_joint_2.reset_parameters();
-    pid_joint_2.KP=5;
-    pid_joint_2.KI=40;
-    pid_joint_2.KD=0;
-    pid_joint_2.I_limit=200;
-    pid_joint_2.D_limit=50;
-    pid_joint_2.output_limit=250;
-    pid_joint_2.set_point=0;
-
-    pid_joint_4.sampling_time=SAMPLING_TIME_;
-    pid_joint_4.reset_parameters();
-    pid_joint_4.KP=5;
-    pid_joint_4.KI=40;
-    pid_joint_4.KD=0;
-    pid_joint_4.I_limit=200;
-    pid_joint_4.D_limit=50;
-    pid_joint_4.output_limit=250;
-    pid_joint_4.set_point=0;
-
-    pid_joint_6.sampling_time=SAMPLING_TIME_;
-    pid_joint_6.reset_parameters();
-    pid_joint_6.KP=5;
-    pid_joint_6.KI=40;
-    pid_joint_6.KD=0;
-    pid_joint_6.I_limit=200;
-    pid_joint_6.D_limit=50;
-    pid_joint_6.output_limit=250;
-    pid_joint_6.set_point=0;
 
     for(unsigned char i=0;i<12;i++)
     {
         pid_joint[i].sampling_time=SAMPLING_TIME_;
         pid_joint[i].reset_parameters();
         pid_joint[i].KP=5;
-        pid_joint[i].KI=40;
-        pid_joint[i].KD=0;
-        pid_joint[i].I_limit=300;
-        pid_joint[i].D_limit=50;
-        pid_joint[i].output_limit=400;
+        pid_joint[i].KI=80;
+        pid_joint[i].KD=0.05;
+        pid_joint[i].I_limit=500;
+        pid_joint[i].D_limit=100;
+        pid_joint[i].output_limit=700;
         pid_joint[i].set_point=0;
     }
 }
 void PID_reset()
 {
-    pid_body_roll_0_1.reset_parameters();
-    pid_body_pitch.reset_parameters();
-    pid_ankle_left.reset_parameters();
-    pid_ankle_right.reset_parameters();
+    pid_impedace_ouputIntegrate_right=0;
+    pid_impedace_ouputIntegrate_left=0;
+
+    pid_ankle_left_roll.reset_parameters();
+    pid_ankle_right_roll.reset_parameters();
+    pid_ankle_left_pitch.reset_parameters();
+    pid_ankle_right_pitch.reset_parameters();
     pid_foot_place.reset_parameters();
-
-    pid_joint_0.reset_parameters();
-    pid_joint_1.reset_parameters();
-    pid_joint_8.reset_parameters();
-    pid_joint_9.reset_parameters();
-
-    pid_joint_3.reset_parameters();
-    pid_joint_5.reset_parameters();
-    pid_joint_7.reset_parameters();
-
-    pid_joint_2.reset_parameters();
-    pid_joint_4.reset_parameters();
-    pid_joint_6.reset_parameters();
-
-
+    pid_impedance_left.reset_parameters();
+    pid_impedance_right.reset_parameters();
     for(unsigned char i=0;i<12;i++)
     {
         pid_joint[i].reset_parameters();
