@@ -148,6 +148,8 @@ struct Sys_flag_struct{
     unsigned char controller_impedance:1;
     unsigned char controller_joint[12];
 
+    unsigned char wait_for_stable;
+
 }sys_flag;
 unsigned int pos12LowerLink[25];
 /*
@@ -155,7 +157,9 @@ unsigned int pos12LowerLink[25];
  */
 
 //====================hardware============
-const int samPos12_hardware[25]={1640,1689,2050,2052,663,3446,1260,2910,2761,2163,1260,2370,
+//const int samPos12_hardware[25]={1627,1700,2050,2052,663,3446,1260,2910,2751,2190,1260,2370,
+//                                 2025,2050,2050,2050,2050,2050,3100,940,0,0,2170,1500,2050};// zero of the real system 12bits
+const int samPos12_hardware[25]={1620,1680,2050,2060,663,3446,1260,2910,2730,2173,1237,2370,
                                  2025,2050,2050,2050,2050,2050,3100,940,0,0,2170,1500,2050};// zero of the real system 12bits
 
 const double pos12bitTorad=0.083*M_PI/180;
@@ -188,7 +192,7 @@ const unsigned char sitdown_samD[12]={15,15,15,15,15,15,15,15,15,15,15,15};
 //================================ init standing for walking| from standing================
 // int pose_init_walking[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
 //                                 0,0,0,0,0,0,0,0,0,0,0,0,0};
-double pose_init_walking[25]={0,0,-16,16,25,-25,16,-16,0,0,2,-2,
+double pose_init_walking[25]={0,0,-19,19,25,-25,15,-15,0,0,0,0,
                               0,0,0,0,0,0,0,0,0,0,0,0,0};
 //{0,0,-300,300,522,-522,235,-235,-13,13,26,-26,
 //                                 0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -202,9 +206,9 @@ double pose_init_walking[25]={0,0,-16,16,25,-25,16,-16,0,0,2,-2,
 
 double pose_standing_1[25]={0,0,-54,54,154,-154,132,-132,-3,3,7,-7,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
-double pose_standing_2[25]={0,0,-43,43,117,-117,111,-111,0,0,2,-2,
+double pose_standing_2[25]={0,0,-43,43,117,-117,115,-115,0,0,2,-2,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
-double pose_standing_3[25]={0,0,-5,5,-2,2,-1,1,0,0,2,-2,
+double pose_standing_3[25]={0,0,-9,9,-2,2,-4,4,0,0,0,0,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
 const unsigned int standing_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
 const unsigned char standing_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
@@ -272,8 +276,11 @@ double pose_step_7[25]={0,0,-20,20,33,-33,20,-20,0,0,1.5,-1.5,
                         0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 const unsigned int steping_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
+//{3500,3500,3500,3500,3500,3500,3500,3500,3500,3500,3500,3500};
 const unsigned char steping_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
+//{45,45,45,45,45,45,45,45,45,45,45,45};
 const unsigned char steping_samD[12]={30,30,30,30,30,30,30,30,30,30,30,30};
+//{35,35,35,35,35,35,35,35,35,35,35,35};
 const unsigned int numOfFrames_steping[2]={20,25};
 
 unsigned char taskStepCurrentScene=0;
@@ -295,11 +302,11 @@ unsigned char taskStepCurrentScene=0;
 #define TASK_COM_TRANSFER  8
 #define TASK_STANDINGINIT_F_STEP  9
 #define TASK_STEP_SINUNOID 10
-#define TASK_STEP_IN_LEFT
+#define TASK_STEP_COMMAND 11
 //#define TASK_POSES_TEST_  6
 //#define TASK_NEW_WALKING_ 7
 
-#define TASK_IDLE_   11
+#define TASK_IDLE_   12
 typedef struct{
     unsigned char startFlag:1;
     unsigned char finishFlag:1;
@@ -392,6 +399,7 @@ struct MyIMU{
     double yaw;
 }imu;
 
+double COMpos=0;
 double leftFootPos[3];
 double rightFootPos[3];
 double footsDistance=0;
@@ -433,14 +441,20 @@ const double foot_place_setpoint=0.15;
 //====================== sinunoid step task=========================
 double pose_step_sinunoid_init[25]={0,0,-20,20,33,-33,20,-20,0,0,1.5,-1.5,
                                     0,0,0,0,0,0,0,0,0,0,0,0,0};
-#define BODY_TILT_OFFSET 8
-#define BODY_HEIGHT_LEFT 0.477
-#define BODY_HEIGHT_RIGHT 0.48
-#define FOOT_POS_X_OFFSET 0.07
-#define FOOT_POS_Z_AMP 2
-#define FOOT_POS_Z_OFFSET 1.85
+
+#define STEP_WAIT_FOR_STABLE_1     1
+#define BODY_TILT_OFFSET 10//7
+#define BODY_HEIGHT_LEFT 0.48//0.477
+#define BODY_HEIGHT_RIGHT 0.475//0.48
+#define FOOT_POS_X_OFFSET 0.07//0.07
+#define FOOT_POS_Y_OFFSET_LEFT  0.015//0.02
+#define FOOT_POS_Y_OFFSET_RIGHT 0.015
+#define FOOT_POS_Z_AMP 2//2
+#define FOOT_POS_Z_OFFSET 1.85//1.85
 #define ARRAY_SIZE(w,h) (w*h)
 #define INDEX(x,y) ((x-1)+4*(y-1))
+#define STEP_WIDTH 0.03//0.03
+#define STEP_HEIGHT 0.03//0.025
 
 
 const double gravity=9.81;
@@ -451,10 +465,10 @@ const double L3=0.21;
 const double L4=0.209;
 
 //#define FOOT_POS_Y_OFFSET 0.02
-double foot_right_posY_offset=0.025;
-double foot_left_posY_offset=0.025;
-double AcomX=0.025;//0.07;
-const double AcomY=0.03;
+double foot_right_posY_offset=FOOT_POS_Y_OFFSET_RIGHT;//0.03;
+double foot_left_posY_offset=FOOT_POS_Y_OFFSET_LEFT;//0.035;
+double AcomX=STEP_HEIGHT;//0.025;//0.07;
+const double AcomY=STEP_WIDTH;//0.03;
 const double freq=0.6;//0.6;
 const double omega=2*M_PI*freq;
 const double periodT=1/freq;
@@ -486,7 +500,7 @@ double calAngle[6];
 double step_timer=0;
 
 //========= damper process=====
-#define FOOT_POS_Z_DAMPING 0.01
+#define FOOT_POS_Z_DAMPING 0.01//0.02
 #define STEP_STANCE 0
 #define STEP_UP 1
 #define STEP_DOWN 2
@@ -495,7 +509,7 @@ unsigned char flag_enable_damping_left=0;
 unsigned char flag_trigger_damping_right=0;
 unsigned char flag_enable_damping_right=0;
 double step_damping_timer_t0=0;
-double omega_damping=3*omega;
+double omega_damping=3*omega;//2.9
 unsigned char step_left_status=STEP_STANCE;
 unsigned char step_right_status=STEP_STANCE;
 //========= x motion process======
@@ -525,6 +539,10 @@ double phiYaw=0;
 double omega_yaw=omega_X/2;
 double foot_left_yaw=0;
 double foot_right_yaw=0;
+const  double foot_left_roll=1/180.0*M_PI;
+double c_roll=cos(foot_left_roll);
+double s_roll=sin(foot_left_roll);
+
 unsigned char rotate_step_count=0;
 void inverseKinematic(double *PMatrix,double Px,double Py, double Pz,double *angle){
     double L05=sqrt(pow(Px+L6*(*(PMatrix+INDEX(1,3))),2)+pow(Py+L6*(*(PMatrix+INDEX(2,3))),2)+pow(Pz+L6*(*(PMatrix+INDEX(3,3))),2));
@@ -543,58 +561,102 @@ void inverseKinematic(double *PMatrix,double Px,double Py, double Pz,double *ang
     *(angle+2)=acos((-(*(PMatrix+INDEX(3,3)))*cos(*(angle+4))*cos(*(angle+5))-(*(PMatrix+INDEX(3,2)))*cos(*(angle+4))*sin(*(angle+5))+(*(PMatrix+INDEX(3,1)))*sin(*(angle+4)))/-cos(*(angle+1)))-(*(angle+3));
 }
 
-//========= step mode ============
-#define STEP_MODE_NORMAL  0
-#define STEP_MODE_IN      1
-#define STEP_MODE_OUT     2
-#define STEP_MODE_INPLACE 3
-#define STEP_MODE_ROTATE  4
-#define STEP_LEGID_LEFT   5
-#define STEP_LEGID_RIGHT  6
+//==== leg id======================
+#define STEP_LEGID_LEFT           0
+#define STEP_LEGID_RIGHT          1
+
+
+//==== mode ===========
+#define STEP_MODE_INPLACE         1
+#define STEP_MODE_FORWARD_IN      2
+#define STEP_MODE_FORWARD_OUT     3
+#define STEP_MODE_FORWARD_NORMAL  7
+#define STEP_MODE_BACKWARD_NORMAL 8
+#define STEP_MODE_BACKWARD_IN     4
+#define STEP_MODE_BACKWARD_OUT    5
+#define STEP_MODE_ROTATE          6
 
 
 
 
+#define STEP_CMD_WALK_FORWARD_LEFT     0
+#define STEP_CMD_WALK_FORWARD_RIGHT    1
 
-void setUp_stepMotion(unsigned char mode,unsigned legID,double yaw_degree){
-    double yaw=yaw_degree/180*M_PI;
+#define STEP_CMD_WALK_ROTATE_LEFT      2
+#define STEP_CMD_WALK_ROTATE_RIGHT     3
+
+#define STEP_CMD_WALK_BACKWARD_LEFT    4
+#define STEP_CMD_WALK_BACKWARD_RIGHT   5
+
+#define STEP_CMD_WALK_SIDE_LEFT        6
+#define STEP_CMD_WALK_SIDE_RIGHT       7
+
+#define STEP_CMD_WALK_INPLACE       8
+
+
+unsigned char step_command=0;
+unsigned char step_number=0;
+unsigned char step_count=0;
+unsigned char leg_current_id=0;
+
+
+
+
+void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_degree){
+    double yaw=rotation_degree/180*M_PI;
     step_duration=periodT/2;
     flag_enable_step_in=0;
     flag_enable_step_out=0;
-    AcomX=0.025;
+
     Ayaw_left=0;
     Ayaw_right=0;
-    foot_left_posY_offset=0.02;
-    foot_right_posY_offset=0.02;
+    foot_left_posY_offset=FOOT_POS_Y_OFFSET_LEFT;
+    foot_right_posY_offset=FOOT_POS_Y_OFFSET_RIGHT;
     flag_enable_step_yaw=0;
-    switch (mode)
-    {
-    case STEP_MODE_NORMAL:
-        break;
-    case STEP_MODE_IN:
-        flag_enable_step_in=1;
-        break;
-    case STEP_MODE_OUT:
-        flag_enable_step_out=1;
-        break;
+
+    switch (mode) {
     case STEP_MODE_INPLACE:
         AcomX=0;
         break;
+    case STEP_MODE_FORWARD_IN:
+        AcomX=STEP_HEIGHT;
+        flag_enable_step_in=1;
+        break;
+    case STEP_MODE_FORWARD_OUT:
+        AcomX=STEP_HEIGHT;
+        flag_enable_step_out=1;
+        break;
+    case STEP_MODE_BACKWARD_IN:
+        AcomX=-STEP_HEIGHT;
+        flag_enable_step_in=1;
+        break;
+    case STEP_MODE_BACKWARD_OUT:
+        AcomX=-STEP_HEIGHT;
+        flag_enable_step_out=1;
+        break;
+    case STEP_MODE_BACKWARD_NORMAL:
+        AcomX=-STEP_HEIGHT;
+        break;
+    case STEP_MODE_FORWARD_NORMAL:
+        AcomX=STEP_HEIGHT;
+        break;
+
     case STEP_MODE_ROTATE:
         flag_enable_step_yaw=1;
         rotate_step_count=0;
         AcomX=0;
         step_duration=periodT;
         if(legID==STEP_LEGID_LEFT){
-             Ayaw_left=yaw;
+            Ayaw_left=yaw;
         }else if(legID==STEP_LEGID_RIGHT){
-             Ayaw_right=yaw;
+            Ayaw_right=yaw;
         }
         break;
     default:
         break;
-
     }
+
+
     if(legID==STEP_LEGID_LEFT){
         phiX_left=-M_PI/2;
         phiY_left=0;

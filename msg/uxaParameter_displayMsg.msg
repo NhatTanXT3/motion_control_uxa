@@ -1,3 +1,5 @@
+float64[12] controller_output
+float64[12] posSetPointDegree
 float64 CN1
 float64 CN2
 float64 CN3

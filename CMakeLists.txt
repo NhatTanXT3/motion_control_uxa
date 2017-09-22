@@ -67,6 +67,8 @@ find_package(catkin REQUIRED COMPONENTS
    SAMtfCalMsg.msg
 
    uxaSetPIDJointMsg.msg
+
+   uxaMotionCommandMsg.msg
  )
 
 ## Generate services in the 'srv' folder
