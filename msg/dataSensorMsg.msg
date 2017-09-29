@@ -9,6 +9,9 @@ uint16 zmp_P7
 float64 body_roll
 float64 body_pitch
 float64 body_yaw
+float64 body_roll_rate
+float64 body_pitch_rate
+float64 body_yaw_rate
 float64 left_x
 float64 left_y
 float64 left_amplitude

@@ -182,9 +182,12 @@ int main(int argc, char **argv){
 bool controller_on=0;
 
 void controller_handle(){
-    if(sys_flag.feedback_sam_available&&sys_flag.feedback_tfCal_available&&sys_flag.feedback_sensor_available){
-        sys_flag.feedback_sam_available=0;
-        sys_flag.feedback_tfCal_available=0;
+    //    if(sys_flag.feedback_sam_available&&sys_flag.feedback_tfCal_available&&sys_flag.feedback_sensor_available){
+    //        sys_flag.feedback_sam_available=0;
+    //        sys_flag.feedback_tfCal_available=0;
+    //        sys_flag.feedback_sensor_available=0;
+
+    if(sys_flag.feedback_sensor_available){
         sys_flag.feedback_sensor_available=0;
         controller_on=0;
         // using sam feedback
@@ -199,11 +202,12 @@ void controller_handle(){
 
         if(sys_flag.controller_body_pitch){
             controller_on=1;
-            pid_body_pitch.PID_type_5(imu.roll,0.9);
-            //            controller_output[7]=pid_body_pitch.output;
-            //            controller_output[6]=-pid_body_pitch.output;
-            controller_output[3]=-pid_body_pitch.output;
-            controller_output[2]=pid_body_pitch.output;
+//            pid_body_pitch.PID_type_5(imu.roll,0.9);
+            pid_body_pitch.PID_type_5(imu.roll_rate,0.1);
+            controller_output[7]=pid_body_pitch.output;
+            controller_output[6]=-pid_body_pitch.output;
+//                        controller_output[3]=-pid_body_pitch.output;
+//                        controller_output[2]=pid_body_pitch.output;
         }
 
         if(sys_flag.controller_body_roll){
@@ -387,7 +391,7 @@ void controller_handle(){
             stable_cycle=0;
         }
 
-        plotMsg.CN12=stable_cycle;
+        //        plotMsg.CN12=stable_cycle;
 
     }
 
@@ -408,13 +412,15 @@ void controller_handle(){
         }
     }
 
-    plotMsg.CN1= foot_left_position[0];
+    plotMsg.CN1= foot_left_position[0]+foot_pos_x_offset;
     plotMsg.CN2=foot_left_position[1];
-    plotMsg.CN3=foot_left_position[2];
+    plotMsg.CN3=foot_left_position[2]+BODY_HEIGHT_LEFT;
 
-    plotMsg.CN4= foot_right_position[0];
+    plotMsg.CN4= foot_right_position[0]+foot_pos_x_offset;
     plotMsg.CN5= foot_right_position[1];
-    plotMsg.CN6=foot_right_position[2];
+    plotMsg.CN6=foot_right_position[2]+BODY_HEIGHT_RIGHT;
+
+//    plotMsg.CN1=imu.roll-BODY_PITCH_SETPOINT_STANDING;
 
     //    plotMsg.CN4= COMpos;
     //    plotMsg.CN5= pid_body_pitch.output;
@@ -422,11 +428,11 @@ void controller_handle(){
     //    plotMsg.CN11=pid_body_pitch.set_point;
 
     //    plotMsg.CN7=posSetPointDegree[6];
-    //    plotMsg.CN8=currentSAMPosDegree[6];
-    //    plotMsg.CN9=posSetPointDegree[7];
-    //    plotMsg.CN10=currentSAMPosDegree[7];
-
-    //            plotMsg.CN12=pid_joint[9].output;
+    plotMsg.CN8=pid_body_pitch.output;
+    plotMsg.CN9=pid_body_pitch.fb_filter;
+    plotMsg.CN10=pid_body_pitch.fb;
+    plotMsg.CN11=pid_body_pitch.D_term;
+    plotMsg.CN12=pid_body_pitch.I_term;
 
     for(unsigned char i=0; i<12;i++){
         plotMsg.controller_output[i]=controller_output[i];
@@ -1158,17 +1164,17 @@ void task_handle(){
             case 0:
                 double beginpose[NUM_OF_SAM_];
 
-                foot_left_position[0]=-FOOT_POS_X_OFFSET;
+                foot_left_position[0]=-foot_pos_x_offset;
                 foot_left_position[1]=AcomY*sin(phiY_left)+foot_left_posY_offset;
                 double b;
-                b=FOOT_POS_Z_AMP*sin(phiZ_left);
+                b=foot_pos_z_amp*sin(phiZ_left);
                 if(b<0)
                     b=0;
                 foot_left_position[2]=-BODY_HEIGHT_LEFT+b;
 
-                foot_right_position[0]=-FOOT_POS_X_OFFSET;
+                foot_right_position[0]=-foot_pos_x_offset;
                 foot_right_position[1]=AcomY*sin(phiY_right)-foot_right_posY_offset;
-                b=FOOT_POS_Z_AMP*sin(phiZ_right);
+                b=foot_pos_z_amp*sin(phiZ_right);
                 if(b<0)
                     b=0;
                 foot_right_position[2]=-BODY_HEIGHT_RIGHT+b;
@@ -1177,19 +1183,19 @@ void task_handle(){
                 pose_step_sinunoid_init[1]=calAngle[5]*180/M_PI;
                 pose_step_sinunoid_init[3]=-calAngle[4]*180/M_PI;
                 pose_step_sinunoid_init[5]=-calAngle[3]*180/M_PI;
-                pose_step_sinunoid_init[7]=calAngle[2]*180/M_PI-BODY_TILT_OFFSET;
+                pose_step_sinunoid_init[7]=calAngle[2]*180/M_PI-body_tilt_offset;
                 pose_step_sinunoid_init[9]=calAngle[1]*180/M_PI;
                 pose_step_sinunoid_init[11]=calAngle[0]*180/M_PI;
                 inverseKinematic(foot_right_mat,foot_right_position[0],foot_right_position[1],foot_right_position[2],calAngle);
                 pose_step_sinunoid_init[0]=calAngle[5]*180/M_PI;
                 pose_step_sinunoid_init[2]=calAngle[4]*180/M_PI;
                 pose_step_sinunoid_init[4]=calAngle[3]*180/M_PI;
-                pose_step_sinunoid_init[6]=-calAngle[2]*180/M_PI+BODY_TILT_OFFSET;
+                pose_step_sinunoid_init[6]=-calAngle[2]*180/M_PI+body_tilt_offset;
                 pose_step_sinunoid_init[8]=calAngle[1]*180/M_PI;
                 pose_step_sinunoid_init[10]=calAngle[0]*180/M_PI;
 
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(100,beginpose,pose_step_sinunoid_init);
+                currentScene.setUpMyScene(200,beginpose,pose_step_sinunoid_init);
 
                 break;
             case 1:// step in left
@@ -1404,38 +1410,38 @@ void task_handle(){
 
                 double beginpose[NUM_OF_SAM_];
 
-                foot_left_position[0]=-FOOT_POS_X_OFFSET;
+                foot_left_position[0]=-foot_pos_x_offset;
                 foot_left_position[1]=AcomY*sin(phiY_left)+foot_left_posY_offset;
                 double b;
-                b=FOOT_POS_Z_AMP*sin(phiZ_left);
+                b=foot_pos_z_amp*sin(phiZ_left);
                 if(b<0)
                     b=0;
                 foot_left_position[2]=-BODY_HEIGHT_LEFT+b;
 
-                foot_right_position[0]=-FOOT_POS_X_OFFSET;
+                foot_right_position[0]=-foot_pos_x_offset;
                 foot_right_position[1]=AcomY*sin(phiY_right)-foot_right_posY_offset;
-                b=FOOT_POS_Z_AMP*sin(phiZ_right);
+                b=foot_pos_z_amp*sin(phiZ_right);
                 if(b<0)
                     b=0;
                 foot_right_position[2]=-BODY_HEIGHT_RIGHT+b;
 
                 inverseKinematic(foot_left_mat,foot_left_position[0],foot_left_position[1],foot_left_position[2],calAngle);
                 pose_step_sinunoid_init[1]=calAngle[5]*180/M_PI;
-                pose_step_sinunoid_init[3]=-calAngle[4]*180/M_PI;
+                pose_step_sinunoid_init[3]=-calAngle[4]*180/M_PI-ankle_pitch_offset;
                 pose_step_sinunoid_init[5]=-calAngle[3]*180/M_PI;
-                pose_step_sinunoid_init[7]=calAngle[2]*180/M_PI-BODY_TILT_OFFSET;
+                pose_step_sinunoid_init[7]=calAngle[2]*180/M_PI-body_tilt_offset;
                 pose_step_sinunoid_init[9]=calAngle[1]*180/M_PI;
                 pose_step_sinunoid_init[11]=calAngle[0]*180/M_PI;
                 inverseKinematic(foot_right_mat,foot_right_position[0],foot_right_position[1],foot_right_position[2],calAngle);
                 pose_step_sinunoid_init[0]=calAngle[5]*180/M_PI;
-                pose_step_sinunoid_init[2]=calAngle[4]*180/M_PI;
+                pose_step_sinunoid_init[2]=calAngle[4]*180/M_PI+ankle_pitch_offset;
                 pose_step_sinunoid_init[4]=calAngle[3]*180/M_PI;
-                pose_step_sinunoid_init[6]=-calAngle[2]*180/M_PI+BODY_TILT_OFFSET;
+                pose_step_sinunoid_init[6]=-calAngle[2]*180/M_PI+body_tilt_offset;
                 pose_step_sinunoid_init[8]=calAngle[1]*180/M_PI;
                 pose_step_sinunoid_init[10]=calAngle[0]*180/M_PI;
 
                 currentScene.mapPos12ToDegree(currentControlledSamPos12,beginpose,NUM_OF_SAM_);
-                currentScene.setUpMyScene(100,beginpose,pose_step_sinunoid_init);
+                currentScene.setUpMyScene(200,beginpose,pose_step_sinunoid_init);
 
             }else{
                 unsigned char step_mode;
@@ -1492,7 +1498,7 @@ void task_handle(){
                     }else{
                         step_mode=STEP_MODE_ROTATE;
                         leg_current_id=STEP_LEGID_LEFT;
-                        setUp_stepMotion(step_mode,leg_current_id,8);
+                        setUp_stepMotion(step_mode,leg_current_id,12);
                     }
                     break;
                 case STEP_CMD_WALK_ROTATE_RIGHT:
@@ -1502,7 +1508,7 @@ void task_handle(){
                     }else{
                         step_mode=STEP_MODE_ROTATE;
                         leg_current_id=STEP_LEGID_RIGHT;
-                        setUp_stepMotion(step_mode,leg_current_id,8);
+                        setUp_stepMotion(step_mode,leg_current_id,12);
                     }
 
                     break;
@@ -1519,6 +1525,26 @@ void task_handle(){
 
                     break;
                 case STEP_CMD_WALK_BACKWARD_LEFT:
+                    if(step_count==0)
+                    {
+                        step_mode=STEP_MODE_BACKWARD_IN;
+                        leg_current_id=STEP_LEGID_LEFT;
+                        setUp_stepMotion(step_mode,leg_current_id,0);
+                    }
+                    else if(step_count==step_number){
+                        step_mode=STEP_MODE_BACKWARD_OUT;
+                        leg_current_id= (leg_current_id==STEP_LEGID_LEFT?STEP_LEGID_RIGHT:STEP_LEGID_LEFT);
+                        setUp_stepMotion(step_mode,leg_current_id,0);
+                    }
+                    else if(step_count==(step_number+1)){
+                        step_count=0;
+                        task.finishFlag=1;
+                    }else{
+                        step_mode=STEP_MODE_BACKWARD_NORMAL;
+                        leg_current_id= (leg_current_id==STEP_LEGID_LEFT?STEP_LEGID_RIGHT:STEP_LEGID_LEFT);
+                        setUp_stepMotion(step_mode,leg_current_id,0);
+                    }
+
                     break;
                 case STEP_CMD_WALK_BACKWARD_RIGHT:
                     break;
@@ -1601,49 +1627,37 @@ void task_handle(){
     }else if(sys_flag.sinunoid_motion)
     {
         step_timer+=SAMPLING_TIME_;
-        if(step_timer>step_duration){
+        if((step_timer>step_duration)&&(flag_enable_damping_left==0)&&((flag_enable_damping_right==0))){
             currentScene.flag.enable=0;
             currentScene.flag.finish=1;
             sys_flag.sinunoid_motion=0;
         }
-        else{
+        else if(step_timer<=step_duration){
 
             //            if(flag_step_firstTime==0)
             //            {
             //                flag_step_firstTime=1;
             //                flag_enable_step_in=1;
             //            }
-            double damping_left;
-            double damping_right;
 
-            double a=FOOT_POS_Z_AMP*sin(omega*step_timer+phiZ_left)-FOOT_POS_Z_OFFSET;
-            if(a<0)
+
+            left_leg_height=foot_pos_z_amp*sin(omega*step_timer+phiZ_left)-foot_pos_z_offset;
+
+
+
+            double comp_right=left_leg_height-0.07;
+            if (comp_right<0){
+                comp_right=0;
+            }
+
+            if(left_leg_height<0)
             {
-                a=0;
+                left_leg_height=0;
                 //===========damping motion process=============
                 if(step_left_status==STEP_UP)
                     step_left_status=STEP_DOWN;
 
-                if(step_left_status==STEP_DOWN){
-                    if(flag_trigger_damping_left==0)
-                    {
-                        flag_trigger_damping_left=1;
-                        step_damping_timer_t0=step_timer;
-                        flag_enable_damping_left=1;
-                    }
 
-                    if(flag_enable_damping_left){
-
-                        damping_left=FOOT_POS_Z_DAMPING*sin(omega_damping*(step_timer-step_damping_timer_t0));
-                        if(damping_left<0)
-                        {
-                            flag_enable_damping_left=0;
-                            damping_left=0;
-                            step_left_status=STEP_STANCE;
-
-                        }
-                    }
-                }
                 //===========X motion process=============
                 flag_step_up_left=0;
                 flag_Xmotion_resetTimer_left=0;
@@ -1651,39 +1665,32 @@ void task_handle(){
             else{
                 //===========damping motion process=============
                 if(step_left_status==STEP_STANCE)
+                {
                     step_left_status=STEP_UP;
+                    flag_step_up_left=1;
+                }
                 flag_trigger_damping_left=0;
                 flag_enable_damping_left=0;
                 //===========X motion process=============
-                flag_step_up_left=1;
+
             }
 
-            double b=FOOT_POS_Z_AMP*sin(omega*step_timer+phiZ_right)-FOOT_POS_Z_OFFSET;
-            if(b<0){
-                b=0;
+
+
+            right_leg_height=foot_pos_z_amp*sin(omega*step_timer+phiZ_right)-foot_pos_z_offset;
+
+            double comp_left=right_leg_height-0.07;
+            if (comp_left<0){
+                comp_left=0;
+            }
+
+            if(right_leg_height<0){
+                right_leg_height=0;
                 //===========damping motion process=============
                 if(step_right_status==STEP_UP)
                     step_right_status=STEP_DOWN;
 
-                if(step_right_status==STEP_DOWN){
-                    if(flag_trigger_damping_right==0)
-                    {
-                        flag_trigger_damping_right=1;
-                        step_damping_timer_t0=step_timer;
-                        flag_enable_damping_right=1;
-                    }
 
-                    if(flag_enable_damping_right){
-
-                        damping_right=FOOT_POS_Z_DAMPING*sin(omega_damping*(step_timer-step_damping_timer_t0));
-                        if(damping_right<0)
-                        {
-                            flag_enable_damping_right=0;
-                            damping_right=0;
-                            step_right_status=STEP_STANCE;
-                        }
-                    }
-                }
                 //===========X motion process=============
                 flag_step_up_right=0;
                 flag_Xmotion_resetTimer_right=0;
@@ -1692,13 +1699,19 @@ void task_handle(){
             else{
                 //===========damping motion process=============
                 if(step_right_status==STEP_STANCE)
+                {
                     step_right_status=STEP_UP;
+                     flag_step_up_right=1;
+                }
                 flag_trigger_damping_right=0;
                 flag_enable_damping_right=0;
 
                 //===========X motion process=============
-                flag_step_up_right=1;
+
             }
+
+
+
 
             //===========passive ankle process=============
 
@@ -1724,9 +1737,6 @@ void task_handle(){
             ////                samPos12.SAMMode[1]=2;
             //            }
 
-
-
-
             if(flag_step_up_left)
             {
                 if(flag_Xmotion_resetTimer_left==0){
@@ -1735,20 +1745,25 @@ void task_handle(){
                     rotate_step_count++;
                 }
 
+                if(step_Xmotion_timer>periodT_X/2){
+                    flag_step_up_left=0;
+//                    flag_Xmotion_resetTimer_left=0;
+                }
+
 
                 if(flag_enable_step_in)
                 {
                     double step_in_func=AcomX*(1-step_Xmotion_timer*omega_X/M_PI);
-                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-step_in_func-FOOT_POS_X_OFFSET;
-                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)+step_in_func-FOOT_POS_X_OFFSET;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-step_in_func-foot_pos_x_offset;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)+step_in_func-foot_pos_x_offset;
                 }else if(flag_enable_step_out){
                     double step_out_func=AcomX*step_Xmotion_timer*omega_X/M_PI;
-                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)+step_out_func-FOOT_POS_X_OFFSET;
-                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-step_out_func-FOOT_POS_X_OFFSET;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)+step_out_func-foot_pos_x_offset;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-step_out_func-foot_pos_x_offset;
                 }
                 else{
-                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-FOOT_POS_X_OFFSET;
-                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-FOOT_POS_X_OFFSET;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-foot_pos_x_offset;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-foot_pos_x_offset;
                 }
                 step_Xmotion_timer+=SAMPLING_TIME_;
 
@@ -1781,18 +1796,22 @@ void task_handle(){
                     rotate_step_count++;
                 }
 
+                if(step_Xmotion_timer>periodT_X/2){
+                    flag_step_up_right=0;
+                }
+
                 if(flag_enable_step_in)
                 {
                     double step_in_func=AcomX*(1-step_Xmotion_timer*omega_X/M_PI);
-                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)+step_in_func-FOOT_POS_X_OFFSET;
-                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-step_in_func-FOOT_POS_X_OFFSET;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)+step_in_func-foot_pos_x_offset;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-step_in_func-foot_pos_x_offset;
                 }else if(flag_enable_step_out){
                     double step_out_func=AcomX*step_Xmotion_timer*omega_X/M_PI;
-                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-step_out_func-FOOT_POS_X_OFFSET;
-                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)+step_out_func-FOOT_POS_X_OFFSET;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-step_out_func-foot_pos_x_offset;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)+step_out_func-foot_pos_x_offset;
                 }else{
-                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-FOOT_POS_X_OFFSET;
-                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-FOOT_POS_X_OFFSET;
+                    foot_right_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_right)-foot_pos_x_offset;
+                    foot_left_position[0]=AcomX*sin(omega_X*(step_Xmotion_timer)+phiX_left)-foot_pos_x_offset;
                 }
                 step_Xmotion_timer+=SAMPLING_TIME_;
 
@@ -1854,37 +1873,9 @@ void task_handle(){
             //            foot_left_mat[INDEX(3,2)]=s_roll;
             //            foot_left_mat[INDEX(3,3)]=c_roll;
 
-
-            foot_left_position[2]=-BODY_HEIGHT_LEFT+a-b*0.06+damping_left+damping_right;
-            foot_right_position[2]=-BODY_HEIGHT_RIGHT+b-a*0.06+damping_right+damping_left;//0.06
-
-
-            foot_left_position[1]=(AcomY*sin(omega*step_timer+phiY_left)+b*0.05)+foot_left_posY_offset;
-            foot_right_position[1]=(AcomY*sin(omega*step_timer+phiY_right)-a*0.1)-foot_right_posY_offset;//0.2
-
-
+            foot_left_position[1]=(AcomY*sin(omega*step_timer+phiY_left)+comp_left*0.1)+foot_left_posY_offset;
+            foot_right_position[1]=(AcomY*sin(omega*step_timer+phiY_right)-comp_right*0.1)-foot_right_posY_offset;//0.2
             //rotation process
-            inverseKinematic(foot_left_mat,foot_left_position[0],foot_left_position[1],foot_left_position[2],calAngle);
-
-            posSetPointDegree[1]=calAngle[5]*180/M_PI;
-            posSetPointDegree[3]=-calAngle[4]*180/M_PI;
-            posSetPointDegree[5]=-calAngle[3]*180/M_PI;
-            posSetPointDegree[7]=calAngle[2]*180/M_PI-BODY_TILT_OFFSET;
-            posSetPointDegree[9]=calAngle[1]*180/M_PI;
-            posSetPointDegree[11]=calAngle[0]*180/M_PI;
-
-
-
-            inverseKinematic(foot_right_mat,foot_right_position[0],foot_right_position[1],foot_right_position[2],calAngle);
-
-            posSetPointDegree[0]=calAngle[5]*180/M_PI;
-            posSetPointDegree[2]=calAngle[4]*180/M_PI;
-            posSetPointDegree[4]=calAngle[3]*180/M_PI;
-            posSetPointDegree[6]=-calAngle[2]*180/M_PI+BODY_TILT_OFFSET;
-            posSetPointDegree[8]=calAngle[1]*180/M_PI;
-            posSetPointDegree[10]=calAngle[0]*180/M_PI;
-
-
 
             //            plotMsg.CN7=foot_left_yaw;
             //            plotMsg.CN8=foot_right_yaw;
@@ -1894,6 +1885,74 @@ void task_handle(){
             //            //            plotMsg.CN12=pid_joint[9].output;
             //            plot_pub.publish(plotMsg);
         }
+
+        if(step_left_status==STEP_DOWN){
+            if(flag_trigger_damping_left==0)
+            {
+                flag_trigger_damping_left=1;
+                //                        step_damping_timer_t0=step_timer;
+                flag_enable_damping_left=1;
+                step_damping_left_timer_t=0;
+            }
+
+            if(flag_enable_damping_left){
+
+                damping_left=FOOT_POS_Z_DAMPING*sin(omega_damping*(step_damping_left_timer_t));
+                if(damping_left<0)
+                {
+                    flag_enable_damping_left=0;
+                    damping_left=0;
+                    step_left_status=STEP_STANCE;
+
+                }
+                step_damping_left_timer_t+=0.01;;
+            }
+        }
+
+        if(step_right_status==STEP_DOWN){
+            if(flag_trigger_damping_right==0)
+            {
+                flag_trigger_damping_right=1;
+                //                        step_damping_timer_t0=step_timer;
+                step_damping_right_timer_t=0;
+                flag_enable_damping_right=1;
+            }
+
+            if(flag_enable_damping_right){
+
+                damping_right=FOOT_POS_Z_DAMPING*sin(omega_damping*(step_damping_right_timer_t));
+                if(damping_right<0)
+                {
+                    flag_enable_damping_right=0;
+                    damping_right=0;
+                    step_right_status=STEP_STANCE;
+                }
+                step_damping_right_timer_t+=0.01;
+            }
+        }
+
+        foot_left_position[2]=-BODY_HEIGHT_LEFT+left_leg_height-right_leg_height*0.04+damping_left+damping_right;
+        foot_right_position[2]=-BODY_HEIGHT_RIGHT+right_leg_height-left_leg_height*0.04+damping_right+damping_left;//0.06
+
+        inverseKinematic(foot_left_mat,foot_left_position[0],foot_left_position[1],foot_left_position[2],calAngle);
+
+        posSetPointDegree[1]=calAngle[5]*180/M_PI;
+        posSetPointDegree[3]=-calAngle[4]*180/M_PI-ankle_pitch_offset;
+        posSetPointDegree[5]=-calAngle[3]*180/M_PI;
+        posSetPointDegree[7]=calAngle[2]*180/M_PI-body_tilt_offset;
+        posSetPointDegree[9]=calAngle[1]*180/M_PI;
+        posSetPointDegree[11]=calAngle[0]*180/M_PI;
+
+
+
+        inverseKinematic(foot_right_mat,foot_right_position[0],foot_right_position[1],foot_right_position[2],calAngle);
+
+        posSetPointDegree[0]=calAngle[5]*180/M_PI;
+        posSetPointDegree[2]=calAngle[4]*180/M_PI+ankle_pitch_offset;
+        posSetPointDegree[4]=calAngle[3]*180/M_PI;
+        posSetPointDegree[6]=-calAngle[2]*180/M_PI+body_tilt_offset;
+        posSetPointDegree[8]=calAngle[1]*180/M_PI;
+        posSetPointDegree[10]=calAngle[0]*180/M_PI;
     }
 
 }
@@ -2146,7 +2205,7 @@ void sub_function_walking(const uxa_motion_control::uxaMotionCommandMsg::ConstPt
     case STEP_CMD_WALK_FORWARD_LEFT:
         step_command=STEP_CMD_WALK_FORWARD_LEFT;
         if(task.preId==TASK_STANDINGINIT_F_STANDING|task.preId==TASK_STEP_SINUNOID|task.preId==TASK_STANDINGINIT_F_STEP|task.preId==TASK_STEP_COMMAND){
-            ROS_INFO("WALKING_F_STANDINGINIT %d", msg->motionMode);
+            ROS_INFO("STEP_CMD_WALK_FORWARD_LEFT %d", msg->motionMode);
             task.id=TASK_STEP_COMMAND;
         }else{
             ROS_ERROR("error task order, pre task id: %d", task.preId);
@@ -2155,7 +2214,7 @@ void sub_function_walking(const uxa_motion_control::uxaMotionCommandMsg::ConstPt
     case STEP_CMD_WALK_FORWARD_RIGHT:
         step_command=STEP_CMD_WALK_FORWARD_RIGHT;
         if(task.preId==TASK_STANDINGINIT_F_STANDING|task.preId==TASK_STEP_SINUNOID|task.preId==TASK_STANDINGINIT_F_STEP|task.preId==TASK_STEP_COMMAND){
-            ROS_INFO("WALKING_F_STANDINGINIT %d", msg->motionMode);
+            ROS_INFO("STEP_CMD_WALK_FORWARD_RIGHT %d", msg->motionMode);
             task.id=TASK_STEP_COMMAND;
         }else{
             ROS_ERROR("error task order, pre task id: %d", task.preId);
@@ -2164,7 +2223,7 @@ void sub_function_walking(const uxa_motion_control::uxaMotionCommandMsg::ConstPt
     case STEP_CMD_WALK_ROTATE_LEFT:
         step_command=STEP_CMD_WALK_ROTATE_LEFT;
         if(task.preId==TASK_STANDINGINIT_F_STANDING|task.preId==TASK_STEP_SINUNOID|task.preId==TASK_STANDINGINIT_F_STEP|task.preId==TASK_STEP_COMMAND){
-            ROS_INFO("WALKING_F_STANDINGINIT %d", msg->motionMode);
+            ROS_INFO("STEP_CMD_WALK_ROTATE_LEFT %d", msg->motionMode);
             task.id=TASK_STEP_COMMAND;
         }else{
             ROS_ERROR("error task order, pre task id: %d", task.preId);
@@ -2174,7 +2233,7 @@ void sub_function_walking(const uxa_motion_control::uxaMotionCommandMsg::ConstPt
     case STEP_CMD_WALK_ROTATE_RIGHT:
         step_command=STEP_CMD_WALK_ROTATE_RIGHT;
         if(task.preId==TASK_STANDINGINIT_F_STANDING|task.preId==TASK_STEP_SINUNOID|task.preId==TASK_STANDINGINIT_F_STEP|task.preId==TASK_STEP_COMMAND){
-            ROS_INFO("WALKING_F_STANDINGINIT %d", msg->motionMode);
+            ROS_INFO("STEP_CMD_WALK_ROTATE_RIGHT %d", msg->motionMode);
             task.id=TASK_STEP_COMMAND;
         }else{
             ROS_ERROR("error task order, pre task id: %d", task.preId);
@@ -2184,12 +2243,23 @@ void sub_function_walking(const uxa_motion_control::uxaMotionCommandMsg::ConstPt
     case STEP_CMD_WALK_INPLACE:
         step_command=STEP_CMD_WALK_INPLACE;
         if(task.preId==TASK_STANDINGINIT_F_STANDING|task.preId==TASK_STEP_SINUNOID|task.preId==TASK_STANDINGINIT_F_STEP|task.preId==TASK_STEP_COMMAND){
-            ROS_INFO("WALKING_F_STANDINGINIT %d", msg->motionMode);
+            ROS_INFO("STEP_CMD_WALK_INPLACE %d", msg->motionMode);
             task.id=TASK_STEP_COMMAND;
         }else{
             ROS_ERROR("error task order, pre task id: %d", task.preId);
         }
         break;
+
+    case STEP_CMD_WALK_BACKWARD_LEFT:
+        step_command=STEP_CMD_WALK_BACKWARD_LEFT;
+        if(task.preId==TASK_STANDINGINIT_F_STANDING|task.preId==TASK_STEP_SINUNOID|task.preId==TASK_STANDINGINIT_F_STEP|task.preId==TASK_STEP_COMMAND){
+            ROS_INFO("STEP_CMD_WALK_BACKWARD_LEFT %d", msg->motionMode);
+            task.id=TASK_STEP_COMMAND;
+        }else{
+            ROS_ERROR("error task order, pre task id: %d", task.preId);
+        }
+        break;
+
     default:
         break;
     }
@@ -2420,6 +2490,9 @@ void sensor_callback(const uxa_motion_control::dataSensorMsg::ConstPtr& msg){
     imu.roll=msg->body_roll;
     imu.pitch=msg->body_pitch;
     imu.yaw=msg->body_yaw;
+    imu.pitch_rate=msg->body_pitch_rate;
+    imu.roll_rate=msg->body_roll_rate;
+    imu.yaw_rate=msg->body_yaw_rate;
 
     rightZMP.amp_filtered=rightZMP.amp_filtered*0.9+0.1*rightZMP.amp;
     rightZMP.delta_amp=rightZMP.amp_filtered-rightZMP.pre_amp;
@@ -2468,18 +2541,17 @@ void sam_tfCal_callback(const uxa_motion_control::SAMtfCalMsg::ConstPtr& msg){
     footsDistance=leftFootPos[0]-rightFootPos[0];
 }
 
-
 void PID_control_init(){
 
     pid_body_pitch.sampling_time=SAMPLING_TIME_;
     pid_body_pitch.reset_parameters();
     pid_body_pitch.KP=0;
-    pid_body_pitch.KI=8;
-    pid_body_pitch.KD=0.5;
+    pid_body_pitch.KI=11;
+    pid_body_pitch.KD=0;
     pid_body_pitch.I_limit=200;
     pid_body_pitch.D_limit=100;
     pid_body_pitch.output_limit=400;
-    pid_body_pitch.set_point=-15;
+    pid_body_pitch.set_point=-BODY_PITCH_SETPOINT_STANDING;
 
     //    pid_impedance_right.sampling_time=SAMPLING_TIME_;
     //    pid_impedance_right.reset_parameters();

@@ -159,7 +159,7 @@ unsigned int pos12LowerLink[25];
 //====================hardware============
 //const int samPos12_hardware[25]={1627,1700,2050,2052,663,3446,1260,2910,2751,2190,1260,2370,
 //                                 2025,2050,2050,2050,2050,2050,3100,940,0,0,2170,1500,2050};// zero of the real system 12bits
-const int samPos12_hardware[25]={1620,1680,2050,2060,663,3446,1260,2910,2730,2173,1237,2370,
+const int samPos12_hardware[25]={1620,1680,2050,2060,663,3325,1260,2910,2730,2173,1237,2370,
                                  2025,2050,2050,2050,2050,2050,3100,940,0,0,2170,1500,2050};// zero of the real system 12bits
 
 const double pos12bitTorad=0.083*M_PI/180;
@@ -184,11 +184,11 @@ unsigned int default_averageTorq[12]={2000,2000,2000,2000,2000,2000,2000,2000,20
 //================================== sit down| from init posef===============================
 // int pose_sitdown[25]={0,0,-652,652,1852,-1852,1604,-1604,-39,39,91,-39,
 //                           0,0,0,0,0,0,0,0,0,0,0,0,0};
-double pose_sitdown[25]={0,0,-54,54,154,-154,132,-132,-3,3,7,-7,
+double pose_sitdown[25]={5,-5,-54,54,154,-154,132,-132,-3,3,7,-7,
                          0,0,0,0,0,0,0,0,0,0,0,0,0};
 const unsigned int sitdown_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
 const unsigned char sitdown_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
-const unsigned char sitdown_samD[12]={15,15,15,15,15,15,15,15,15,15,15,15};
+const unsigned char sitdown_samD[12]={10,10,10,10,10,10,10,10,10,10,10,10};
 //================================ init standing for walking| from standing================
 // int pose_init_walking[25]={0,0,-200,200,300,-300,200,-200,0,0,20,-20,
 //                                 0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -204,15 +204,15 @@ double pose_init_walking[25]={0,0,-19,19,25,-25,15,-15,0,0,0,0,
 // int pose_standing_3[25]={0,0,-65,65,-26,26,-13,13,0,0,20,-20,
 //                               0,0,0,0,0,0,0,0,0,0,0,0,0};
 
-double pose_standing_1[25]={0,0,-54,54,154,-154,132,-132,-3,3,7,-7,
+double pose_standing_1[25]={5,-5,-54,54,154,-154,132,-132,-3,3,7,-7,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
-double pose_standing_2[25]={0,0,-43,43,117,-117,115,-115,0,0,2,-2,
+double pose_standing_2[25]={2,-2,-50,50,127,-127,128,-128,0,0,2,-2,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
 double pose_standing_3[25]={0,0,-9,9,-2,2,-4,4,0,0,0,0,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
 const unsigned int standing_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
 const unsigned char standing_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
-const unsigned char standing_samD[12]={30,30,30,30,30,30,30,30,30,30,30,30};
+const unsigned char standing_samD[12]={10,10,10,10,10,10,10,10,10,10,10,10};
 const unsigned int numOfFrames_standing[2]={200,300};
 
 
@@ -279,7 +279,10 @@ const unsigned int steping_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3
 //{3500,3500,3500,3500,3500,3500,3500,3500,3500,3500,3500,3500};
 const unsigned char steping_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
 //{45,45,45,45,45,45,45,45,45,45,45,45};
-const unsigned char steping_samD[12]={30,30,30,30,30,30,30,30,30,30,30,30};
+const unsigned char steping_samD[12]={10,10,10,10,10,10,10,10,10,10,10,10};
+//{30,30,30,30,30,30,30,30,30,30,30,30};
+//{10,10,10,10,10,10,10,10,10,10,10,10};
+//{30,30,30,30,30,30,30,30,30,30,30,30};
 //{35,35,35,35,35,35,35,35,35,35,35,35};
 const unsigned int numOfFrames_steping[2]={20,25};
 
@@ -397,6 +400,9 @@ struct MyIMU{
     double roll;
     double pitch;
     double yaw;
+    double roll_rate;
+    double pitch_rate;
+    double yaw_rate;
 }imu;
 
 double COMpos=0;
@@ -410,6 +416,10 @@ unsigned char currentSamAvail[25];
 unsigned int currentControlledSamPos12[25];
 
 //==================== PID ====================================
+
+#define BODY_PITCH_SETPOINT_STANDING    0//-15
+#define BODY_ROLL_SETPOINT_STANDING     0
+
 #define SAMPLING_TIME_ 0.01
 double controller_output[25]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
@@ -443,18 +453,24 @@ double pose_step_sinunoid_init[25]={0,0,-20,20,33,-33,20,-20,0,0,1.5,-1.5,
                                     0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 #define STEP_WAIT_FOR_STABLE_1     1
-#define BODY_TILT_OFFSET 10//7
-#define BODY_HEIGHT_LEFT 0.48//0.477
-#define BODY_HEIGHT_RIGHT 0.475//0.48
+#define BODY_TILT_OFFSET 7//10
+#define ANKLE_PITCH_OFFSET 0
+double ankle_pitch_offset=ANKLE_PITCH_OFFSET;
+#define BODY_HEIGHT_LEFT 0.48//0.48
+#define BODY_HEIGHT_RIGHT 0.478//0.475
 #define FOOT_POS_X_OFFSET 0.07//0.07
-#define FOOT_POS_Y_OFFSET_LEFT  0.015//0.02
-#define FOOT_POS_Y_OFFSET_RIGHT 0.015
-#define FOOT_POS_Z_AMP 2//2
-#define FOOT_POS_Z_OFFSET 1.85//1.85
+double foot_pos_x_offset=FOOT_POS_X_OFFSET;
+#define FOOT_POS_Y_OFFSET_LEFT  0.02//0.02
+#define FOOT_POS_Y_OFFSET_RIGHT 0.02
+#define FOOT_POS_Z_AMP 2//0.8//2
+#define FOOT_POS_Z_OFFSET 1.85//0.65//1.85
+
+double foot_pos_z_amp=FOOT_POS_Z_AMP;
+double foot_pos_z_offset=FOOT_POS_Z_OFFSET;
 #define ARRAY_SIZE(w,h) (w*h)
 #define INDEX(x,y) ((x-1)+4*(y-1))
 #define STEP_WIDTH 0.03//0.03
-#define STEP_HEIGHT 0.03//0.025
+#define STEP_HEIGHT 0.03//0.03
 
 
 const double gravity=9.81;
@@ -468,7 +484,8 @@ const double L4=0.209;
 double foot_right_posY_offset=FOOT_POS_Y_OFFSET_RIGHT;//0.03;
 double foot_left_posY_offset=FOOT_POS_Y_OFFSET_LEFT;//0.035;
 double AcomX=STEP_HEIGHT;//0.025;//0.07;
-const double AcomY=STEP_WIDTH;//0.03;
+double AcomY=STEP_WIDTH;//0.03;
+double body_tilt_offset =BODY_TILT_OFFSET;
 const double freq=0.6;//0.6;
 const double omega=2*M_PI*freq;
 const double periodT=1/freq;
@@ -504,12 +521,19 @@ double step_timer=0;
 #define STEP_STANCE 0
 #define STEP_UP 1
 #define STEP_DOWN 2
+
+double right_leg_height;
+double left_leg_height;
+double damping_left;
+double damping_right;
 unsigned char flag_trigger_damping_left=0;
 unsigned char flag_enable_damping_left=0;
 unsigned char flag_trigger_damping_right=0;
 unsigned char flag_enable_damping_right=0;
 double step_damping_timer_t0=0;
-double omega_damping=3*omega;//2.9
+double step_damping_left_timer_t=0;
+double step_damping_right_timer_t=0;
+double omega_damping=11.3;//11.3
 unsigned char step_left_status=STEP_STANCE;
 unsigned char step_right_status=STEP_STANCE;
 //========= x motion process======
@@ -529,7 +553,10 @@ double step_Xmotion_timer_t0=0;
 double step_Xmotion_timer=0;
 unsigned char flag_Xmotion_resetTimer_left=0;
 unsigned char flag_Xmotion_resetTimer_right=0;
-double omega_X=omega*M_PI/(M_PI-2*asin(FOOT_POS_Z_OFFSET/FOOT_POS_Z_AMP));
+
+//double omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp));
+double omega_X=50;
+double periodT_X=2*M_PI/omega_X;
 
 // =========yaw motion===========
 unsigned char flag_enable_step_yaw=0;
@@ -607,6 +634,7 @@ void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_deg
     step_duration=periodT/2;
     flag_enable_step_in=0;
     flag_enable_step_out=0;
+    body_tilt_offset=BODY_TILT_OFFSET;
 
     Ayaw_left=0;
     Ayaw_right=0;
@@ -614,6 +642,14 @@ void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_deg
     foot_right_posY_offset=FOOT_POS_Y_OFFSET_RIGHT;
     flag_enable_step_yaw=0;
 
+    foot_pos_z_amp=FOOT_POS_Z_AMP;
+    foot_pos_z_offset=FOOT_POS_Z_OFFSET;
+
+
+    foot_pos_x_offset=FOOT_POS_X_OFFSET;
+
+    ankle_pitch_offset=ANKLE_PITCH_OFFSET;
+    AcomY=STEP_WIDTH;
     switch (mode) {
     case STEP_MODE_INPLACE:
         AcomX=0;
@@ -628,14 +664,38 @@ void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_deg
         break;
     case STEP_MODE_BACKWARD_IN:
         AcomX=-STEP_HEIGHT;
+        //        foot_pos_x_offset=0.02;
+//        ankle_pitch_offset=3;
+//        AcomY=0.04;
+        //         body_tilt_offset=25;
         flag_enable_step_in=1;
+        foot_pos_z_amp=2.6;
+        foot_pos_z_offset=2.45;
+//        omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp))*1.5;
+//        periodT_X=2*M_PI/omega_X;
         break;
     case STEP_MODE_BACKWARD_OUT:
         AcomX=-STEP_HEIGHT;
+        //         foot_pos_x_offset=0.02;
+//        ankle_pitch_offset=3;
+//        AcomY=0.04;
+        //         body_tilt_offset=25;
         flag_enable_step_out=1;
+        foot_pos_z_amp=2.6;
+        foot_pos_z_offset=2.45;
+//        omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp))*1.5;
+//        periodT_X=2*M_PI/omega_X;
         break;
     case STEP_MODE_BACKWARD_NORMAL:
         AcomX=-STEP_HEIGHT;
+        //         foot_pos_x_offset=0.02;
+//        ankle_pitch_offset=3;
+//        AcomY=0.04;
+        //         body_tilt_offset=25;
+        foot_pos_z_amp=2.6;
+        foot_pos_z_offset=2.45;
+//        omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp))*1.5;
+//        periodT_X=2*M_PI/omega_X;
         break;
     case STEP_MODE_FORWARD_NORMAL:
         AcomX=STEP_HEIGHT;
@@ -645,6 +705,7 @@ void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_deg
         flag_enable_step_yaw=1;
         rotate_step_count=0;
         AcomX=0;
+        //        body_tilt_offset=2;
         step_duration=periodT;
         if(legID==STEP_LEGID_LEFT){
             Ayaw_left=yaw;
@@ -655,6 +716,10 @@ void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_deg
     default:
         break;
     }
+
+    omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp))*4;
+    periodT_X=2*M_PI/omega_X;
+    omega_yaw=omega_X/2;
 
 
     if(legID==STEP_LEGID_LEFT){

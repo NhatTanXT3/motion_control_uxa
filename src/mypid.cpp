@@ -124,9 +124,10 @@ void myPID::PD_type_4(double feedback, double filter)
 
 void myPID::PID_type_5(double feedback, double filter)
 {
-    er= set_point-feedback;
+
     fb=feedback;
     fb_filter= fb_filter*filter+ fb*(1-filter);
+    er= set_point-fb_filter;
 
     P_term= KP* er;
     I_term +=  KI* sampling_time*( er+ pre_er)/2.0;
@@ -141,6 +142,8 @@ void myPID::PID_type_5(double feedback, double filter)
     output= P_term+ I_term+ D_term;
     output=constrain(output,-output_limit,output_limit);
 }
+
+
 
 void myPID::reset_parameters(void)
 {
