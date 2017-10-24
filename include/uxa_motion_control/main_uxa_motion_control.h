@@ -206,14 +206,14 @@ double pose_init_walking[25]={0,0,-19,19,25,-25,15,-15,0,0,0,0,
 
 double pose_standing_1[25]={5,-5,-54,54,154,-154,132,-132,-3,3,7,-7,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
-double pose_standing_2[25]={2,-2,-50,50,127,-127,128,-128,0,0,2,-2,
+double pose_standing_2[25]={2,-2,-45,45,120,-120,130,-130,0,0,2,-2,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
-double pose_standing_3[25]={0,0,-9,9,-2,2,-4,4,0,0,0,0,
+double pose_standing_3[25]={0,0,-5,5,-2,2,-5,5,0,0,0,0,
                             0,0,0,0,0,0,0,0,0,0,0,0,0};
 const unsigned int standing_averageTorq[12]={3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000,3000};
 const unsigned char standing_samP[12]={40,40,40,40,40,40,40,40,40,40,40,40};
 const unsigned char standing_samD[12]={10,10,10,10,10,10,10,10,10,10,10,10};
-const unsigned int numOfFrames_standing[2]={200,300};
+const unsigned int numOfFrames_standing[2]={300,400};
 
 
 //================================ steping test| from initwaking================
@@ -554,8 +554,8 @@ double step_Xmotion_timer=0;
 unsigned char flag_Xmotion_resetTimer_left=0;
 unsigned char flag_Xmotion_resetTimer_right=0;
 
-//double omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp));
-double omega_X=50;
+double omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp))*2.5;
+//double omega_X=50;
 double periodT_X=2*M_PI/omega_X;
 
 // =========yaw motion===========
@@ -702,9 +702,11 @@ void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_deg
         break;
 
     case STEP_MODE_ROTATE:
+
         flag_enable_step_yaw=1;
         rotate_step_count=0;
         AcomX=0;
+//         AcomX=-0.005;
         //        body_tilt_offset=2;
         step_duration=periodT;
         if(legID==STEP_LEGID_LEFT){
@@ -717,7 +719,7 @@ void setUp_stepMotion(unsigned char mode,unsigned char legID,double rotation_deg
         break;
     }
 
-    omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp))*4;
+    omega_X=omega*M_PI/(M_PI-2*asin(foot_pos_z_offset/foot_pos_z_amp));
     periodT_X=2*M_PI/omega_X;
     omega_yaw=omega_X/2;
 

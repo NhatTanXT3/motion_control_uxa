@@ -513,7 +513,6 @@ void controller_handle(){
 
         for (unsigned char i=0;i<NUM_OF_SAM_;i++){
             //              samPos12.SAMPos12[i]=(unsigned int)((posSetPointDegree[i]+controller_output[i])*degreeToPose12+(double)samPos12_hardware[i]);
-
             samPos12.SAMPos12[i]=(unsigned int)(posSetPointDegree[i]*degreeToPose12+(double)samPos12_hardware[i]+controller_output[i]);
 
             if(samPos12.SAMMode[i]==1)
