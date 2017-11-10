@@ -1,1 +1,3 @@
-# motion_control_uxa
+# [HRobot project]
+Enviroment: ROS
+Uxa_motion_controller node
